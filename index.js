@@ -1,0 +1,168 @@
+// Facets — keep several looks ("outfits") per character and persona, and change them per chat.
+// Uses only SillyTavern's public paths: getContext, events, extension prompts and the image API.
+// It never patches window.fetch and never writes to character cards, chat files or chat metadata.
+
+import { t, setLanguage } from './src/i18n.js';
+import {
+    ctx, settings, save, charKey, personaKey, removeEntity,
+    onCharacterRenamed, onChatRenamed, onChatDeleted,
+} from './src/store.js';
+import { deletePath } from './src/images.js';
+import {
+    initPersonaSource, setPersonaHint, applyAllSoon, updatePrompt, fixZoom,
+    startObservers, currentScene,
+} from './src/apply.js';
+import { openWardrobe, refreshIfOpen, setVersion, isOpen, closeWardrobe } from './src/ui.js';
+
+export const VERSION = '0.1.0';
+setVersion(VERSION);
+
+function settingsPanelHtml() {
+    return `
+      <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+          <b>${t('ext_name')}</b>
+          <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+          <div class="facets-panel-hint">${t('settings_hint')}</div>
+          <button type="button" class="menu_button facets-panel-open" data-facets-open>
+            <i class="fa-solid fa-shirt"></i><span>${t('open_wardrobe')}</span>
+          </button>
+          <div class="facets-panel-version">${t('version', { v: VERSION })}</div>
+        </div>
+      </div>`;
+}
+
+function mountSettingsPanel() {
+    const host = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
+    if (!host) return;
+    let panel = document.getElementById('facets_settings');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'facets_settings';
+        panel.className = 'facets-panel';
+        panel.innerHTML = settingsPanelHtml();
+        host.appendChild(panel);
+        panel.addEventListener('click', (e) => {
+            if (e.target.closest('[data-facets-open]')) openWardrobe({ fromSettings: true });
+        });
+    } else {
+        // Language change: refresh only the text, keep the drawer open/closed as it is.
+        panel.querySelector('.inline-drawer-header b').textContent = t('ext_name');
+        panel.querySelector('.facets-panel-hint').textContent = t('settings_hint');
+        panel.querySelector('.facets-panel-open span').textContent = t('open_wardrobe');
+        panel.querySelector('.facets-panel-version').textContent = t('version', { v: VERSION });
+    }
+}
+
+function mountWand() {
+    const menu = document.getElementById('extensionsMenu');
+    if (!menu) return;
+    let item = document.getElementById('facets_wand');
+    if (!item) {
+        item = document.createElement('div');
+        item.id = 'facets_wand';
+        item.className = 'list-group-item flex-container flexGap5 interactable';
+        item.tabIndex = 0;
+        item.innerHTML = '<div class="fa-solid fa-shirt extensionsMenuExtensionButton"></div><span></span>';
+        item.addEventListener('click', () => openWardrobe({ fromSettings: false }));
+        menu.appendChild(item);
+    }
+    item.querySelector('span').textContent = t('open_wardrobe');
+    updateWand();
+}
+
+function updateWand() {
+    const item = document.getElementById('facets_wand');
+    if (!item) return;
+    const sc = currentScene();
+    // Only inside a one-on-one chat.
+    item.style.display = sc.chatKey ? '' : 'none';
+}
+
+async function removeFiles(paths) {
+    for (const p of paths) await deletePath(p);
+    save();
+}
+
+function registerEvents() {
+    const { eventSource, eventTypes } = ctx();
+    const ev = eventTypes || ctx().event_types;
+    const on = (name, fn) => { if (name) eventSource.on(name, fn); };
+
+    on(ev.CHAT_CHANGED, () => {
+        updateWand();
+        applyAllSoon();
+        if (isOpen()) refreshIfOpen();
+    });
+    for (const name of [ev.CHARACTER_MESSAGE_RENDERED, ev.USER_MESSAGE_RENDERED, ev.MORE_MESSAGES_LOADED,
+        ev.MESSAGE_UPDATED, ev.MESSAGE_SWIPED, ev.MESSAGE_EDITED, ev.CHAT_LOADED, ev.CHARACTER_PAGE_LOADED]) {
+        on(name, applyAllSoon);
+    }
+    on(ev.PERSONA_CHANGED, (avatar) => {
+        setPersonaHint(avatar);
+        applyAllSoon();
+        refreshIfOpen();
+    });
+    on(ev.GENERATION_STARTED, () => { try { updatePrompt(); } catch (e) { console.error('[Facets]', e); } });
+    on(ev.CHARACTER_RENAMED, (oldAvatar, newAvatar) => {
+        onCharacterRenamed(oldAvatar, newAvatar);
+        applyAllSoon();
+    });
+    on(ev.CHARACTER_DELETED, (data) => {
+        const avatar = data?.character?.avatar;
+        if (avatar) removeFiles(removeEntity(charKey(avatar)));
+        applyAllSoon();
+    });
+    on(ev.PERSONA_DELETED, (data) => {
+        const avatar = data?.avatarId;
+        if (avatar) removeFiles(removeEntity(personaKey(avatar)));
+        applyAllSoon();
+    });
+    on(ev.CHAT_RENAMED, (data) => {
+        if (data?.groupId) return;
+        onChatRenamed(data?.avatarId, data?.oldFileName, data?.newFileName);
+        applyAllSoon();
+    });
+    on(ev.CHAT_DELETED, (name) => {
+        const ch = currentScene().character;
+        if (ch) onChatDeleted(ch.avatar, name);
+    });
+    on(ev.APP_READY, () => {
+        mountWand();
+        startObservers();
+        applyAllSoon();
+    });
+}
+
+function registerZoomFix() {
+    // Runs after SillyTavern's own zoom handler (registered earlier), then swaps in the full picture.
+    const $ = globalThis.jQuery;
+    if ($) {
+        $(document).on('click', '.mes .avatar', function () {
+            const el = this;
+            setTimeout(() => fixZoom(el), 0);
+        });
+    }
+}
+
+async function init() {
+    const s = settings();
+    setLanguage(s.lang);
+    await initPersonaSource();
+    mountSettingsPanel();
+    mountWand();
+    registerEvents();
+    registerZoomFix();
+    startObservers();
+    applyAllSoon();
+    document.addEventListener('facets:lang', () => { mountSettingsPanel(); mountWand(); });
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isOpen() && !document.querySelector('dialog[open]')) closeWardrobe();
+    });
+}
+
+// Wait for jQuery-ready like other extensions do.
+if (globalThis.jQuery) globalThis.jQuery(() => { init().catch(e => console.error('[Facets] init', e)); });
+else init().catch(e => console.error('[Facets] init', e));

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Facets test page</title>
+<!-- Real SillyTavern CSS when the server is given the SillyTavern public folder (optional). -->
+<link rel="stylesheet" href="/st/css/fontawesome.min.css">
+<link rel="stylesheet" href="/st/css/solid.min.css">
+<link rel="stylesheet" href="/st/css/toastr.min.css">
+<link rel="stylesheet" href="/st/style.css">
+<link rel="stylesheet" href="/scripts/extensions/third-party/Facets/style.css">
+<style>
+  body { margin: 0; }
+  #fake_top { display: flex; gap: 8px; padding: 8px; align-items: center; flex-wrap: wrap; }
+  #fake_top button, #fake_top select { height: 32px; }
+  #chat { max-width: 760px; margin: 0 auto; padding: 8px; position: static !important; height: auto !important; overflow: visible !important; }
+  #chat .mes { display: flex; gap: 10px; padding: 8px; }
+  #chat .avatar img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
+  #rm_print_characters_block { display: flex; gap: 8px; padding: 8px; }
+  #rm_print_characters_block .avatar img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
+  #extensionsMenu { display: flex; flex-direction: column; border: 1px solid #888; width: 220px; margin: 8px; }
+  #extensions_settings2 { max-width: 420px; margin: 8px; }
+  #prompt_out { white-space: pre-wrap; font-family: monospace; margin: 8px; padding: 6px; border: 1px dashed #888; min-height: 2em; }
+</style>
+<style id="theme_override"></style>
+</head>
+<body>
+<div id="fake_top">
+  <b>Fake SillyTavern</b>
+  <select id="pick_char"></select>
+  <select id="pick_persona"></select>
+  <button id="btn_new_msg">+ message</button>
+  <button id="btn_rename_char">rename char</button>
+  <button id="btn_rename_chat">rename chat</button>
+</div>
+<div id="extensionsMenu"></div>
+<div id="rm_print_characters_block"></div>
+<div id="chat"></div>
+<div id="prompt_out"></div>
+<div id="extensions_settings2"></div>
+<div id="user_avatar_block"></div>
+
+<script src="/st/lib/jquery-3.5.1.min.js"></script>
+<script src="/st/lib/toastr.min.js"></script>
+<script src="/test/fake-st.js"></script>
+<script type="module">
+  await window.__facetsBoot;
+  await import('/scripts/extensions/third-party/Facets/index.js');
+  window.__fakeST.emit('app_ready');
+  window.__facetsLoaded = true;
+</script>
+</body>
+</html>
