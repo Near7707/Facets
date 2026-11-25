@@ -366,6 +366,7 @@ label.facets-btn { margin: 0; }
 .facets-edit { display: flex; flex-direction: column; gap: 12px; }
 .facets-preview {
     width: min(220px, 60%);
+    max-height: 36vh;
     aspect-ratio: 1 / 1;
     margin: 0 auto;
     border-radius: 14px;
@@ -375,6 +376,7 @@ label.facets-btn { margin: 0; }
     cursor: zoom-in;
     -webkit-touch-callout: none;
 }
+.facets-preview.is-tall { width: min(170px, 46%); }
 .facets-preview img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .facets-field { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 .facets-flabel { font-size: 14px; font-weight: 600; }
@@ -535,7 +537,8 @@ label.facets-btn { margin: 0; }
     box-shadow: inset 0 0 0 2px var(--facets-accent);
     pointer-events: none;
 }
-.facets-crop-frame::after {
+.facets-crop-stage.is-tall { width: min(100%, 250px); }
+.facets-crop-frame.guide-round::after {
     /* circle guide: how it looks in a round avatar */
     content: '';
     position: absolute;

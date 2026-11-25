@@ -39,7 +39,7 @@ const STRINGS = {
         reverted: 'Back to the default look',
 
         edit_outfit: 'Edit outfit',
-        fit_square: 'Fit to square',
+        crop: 'Crop',
         replace_image: 'Replace image',
         name_label: 'Name',
         name_note: 'Only you see this',
@@ -65,8 +65,9 @@ const STRINGS = {
         drag_handle: 'Drag to reorder',
         tap_to_edit: 'Tap to edit',
 
-        crop_title: 'Fit to square',
-        crop_hint: 'Drag to move. Zoom out to fit more of the picture.',
+        crop_title: 'Crop',
+        crop_hint: 'Drag to move. Zoom out to fit more of the picture. The frame follows your avatar shape setting.',
+        skip: 'Skip',
         zoom: 'Zoom',
         zoom_out: 'Zoom out',
         zoom_in: 'Zoom in',
@@ -145,7 +146,7 @@ const STRINGS = {
         reverted: '원래 모습으로 돌아왔어요',
 
         edit_outfit: '옷 고치기',
-        fit_square: '정사각형 맞추기',
+        crop: '자르기',
         replace_image: '그림 바꾸기',
         name_label: '이름',
         name_note: '나만 봐요',
@@ -171,12 +172,13 @@ const STRINGS = {
         drag_handle: '끌어서 순서 바꾸기',
         tap_to_edit: '눌러서 고치기',
 
-        crop_title: '정사각형 맞추기',
-        crop_hint: '끌어서 옮기고, 축소하면 더 넓게 담을 수 있어요.',
+        crop_title: '자르기',
+        crop_hint: '끌어서 옮기고, 축소하면 더 넓게 담을 수 있어요. 틀 모양은 아바타 모양 설정을 따라가요.',
+        skip: '건너뛰기',
         zoom: '크기',
         zoom_out: '축소',
         zoom_in: '확대',
-        reset: '처음대로',
+        reset: '원래대로',
 
         settings_title: '설정',
         show_where: '보이는 곳',

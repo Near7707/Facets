@@ -7,6 +7,7 @@ import {
 } from './store.js';
 import {
     urlOf, folderFor, readAsDataURL, loadImage, uploadDataURL, deletePath, autoCrop, renderCrop,
+    avatarAspect, avatarStyle, coverScale,
 } from './images.js';
 import { currentScene, personaName, applyAllSoon, currentPersonaAvatar } from './apply.js';
 import { exportBackup, importBackup, cleanupAll } from './backup.js';
@@ -122,6 +123,13 @@ export function closeWardrobe() {
 
 export function isOpen() { return state.open; }
 
+/** Close, but first keep any pictures still waiting to be cropped (automatic crop). */
+export async function requestClose() {
+    if (state.busy) { toast('info', t('busy')); return; }
+    if (state.crop?.mode === 'add') await finishQueueAuto();
+    closeWardrobe();
+}
+
 /** Redraw whatever screen is open (used after a language change from outside). */
 export function rerender() {
     if (state.open && !state.busy && state.screen !== 'crop') render();
@@ -151,7 +159,9 @@ function back() {
     if (root.querySelector('.facets-full')) { root.querySelector('.facets-full').remove(); return; }
     switch (state.screen) {
         case 'edit': state.screen = 'organize'; state.draft = null; break;
-        case 'crop': state.screen = 'edit'; state.crop = null; break;
+        case 'crop':
+            if (state.crop?.mode === 'add') { finishQueueAuto().then(render); return; }
+            state.screen = state.crop?.mode === 'add' ? 'organize' : 'edit'; state.crop = null; break;
         case 'pair': state.screen = 'edit'; break;
         case 'settings': case 'organize': state.screen = 'wardrobe'; break;
         default: closeWardrobe(); return;
@@ -323,11 +333,11 @@ function viewEdit() {
     const pairIdx = pair ? getEntity(o.pair.key).outfits.indexOf(pair) : 0;
     const body = `
       <div class="facets-edit">
-        <div class="facets-preview" data-act="full" role="button" tabindex="0">
+        <div class="facets-preview${(o.crop?.aspect || 1) < 1 ? ' is-tall' : ''}" style="aspect-ratio:${o.crop?.aspect || 1}" data-act="full" role="button" tabindex="0">
           <img src="${esc(urlOf(o.sq || o.orig))}" alt="" draggable="false">
         </div>
         <div class="facets-row">
-          <button type="button" class="facets-btn" data-act="crop" title="${esc(t('fit_square'))}">${esc(t('fit_square'))}</button>
+          <button type="button" class="facets-btn" data-act="crop" title="${esc(t('crop'))}">${esc(t('crop'))}</button>
           <label class="facets-btn" role="button" tabindex="0" title="${esc(t('replace_image'))}">${esc(t('replace_image'))}
             <input type="file" accept="image/*" data-act="replace-file" hidden></label>
         </div>
@@ -439,11 +449,20 @@ function viewSettings() {
 }
 
 // ---------- crop ----------
+// state.crop = { img, crop, mode: 'recrop' | 'add' | 'replace', queue?: { key, items, index, added } }
 
 function viewCrop() {
-    const head = headTitle(t('crop_title'));
+    const c = state.crop;
+    const q = c?.queue;
+    const count = q && q.items.length > 1 ? ` ${q.index + 1}/${q.items.length}` : '';
+    const head = headTitle(t('crop_title') + count);
+    const aspect = c?.crop.aspect || 1;
+    const guide = avatarStyle();
     const body = `<div class="facets-crop">
-        <div class="facets-crop-stage"><img class="facets-crop-img" alt="" draggable="false"><div class="facets-crop-frame"></div></div>
+        <div class="facets-crop-stage${aspect < 1 ? ' is-tall' : ''}" style="aspect-ratio:${aspect}">
+          <img class="facets-crop-img" alt="" draggable="false">
+          <div class="facets-crop-frame guide-${guide}"></div>
+        </div>
         <div class="facets-note">${esc(t('crop_hint'))}</div>
         <div class="facets-zoom">
           <button type="button" class="facets-iconbtn" data-act="zoom-out" title="${esc(t('zoom_out'))}" aria-label="${esc(t('zoom_out'))}"><i class="fa-solid fa-minus"></i></button>
@@ -451,15 +470,23 @@ function viewCrop() {
           <button type="button" class="facets-iconbtn" data-act="zoom-in" title="${esc(t('zoom_in'))}" aria-label="${esc(t('zoom_in'))}"><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>`;
+    const skip = c?.mode === 'add'
+        ? `<button type="button" class="facets-btn" data-act="crop-skip" title="${esc(t('skip'))}">${esc(t('skip'))}</button>` : '';
     const foot = `<div class="facets-row">
-        <button type="button" class="facets-btn" data-act="crop-reset">${esc(t('reset'))}</button>
-        <button type="button" class="facets-btn facets-primary" data-act="crop-apply">${esc(t('apply'))}</button>
+        <button type="button" class="facets-btn" data-act="crop-reset" title="${esc(t('reset'))}">${esc(t('reset'))}</button>
+        ${skip}
+        <button type="button" class="facets-btn facets-primary" data-act="crop-apply" title="${esc(t('apply'))}">${esc(t('apply'))}</button>
       </div>`;
     return [head, body, foot];
 }
 
 const ZMIN = 0.5;
-function zmax() { const c = state.crop; return c ? Math.max(4, c.cover * 3) : 4; }
+function zmax() {
+    const c = state.crop;
+    if (!c) return 4;
+    const cover = coverScale(c.img.naturalWidth, c.img.naturalHeight, c.crop.aspect || 1);
+    return Math.max(4, cover * 3);
+}
 function scaleToRange(s) { return Math.round(Math.log(s / ZMIN) / Math.log(zmax() / ZMIN) * 1000); }
 function rangeToScale(v) { return ZMIN * Math.pow(zmax() / ZMIN, v / 1000); }
 
@@ -472,19 +499,24 @@ function mountCrop() {
     drawCrop();
 }
 
+function stageSize() {
+    const stage = root?.querySelector('.facets-crop-stage');
+    return stage ? { W: stage.clientWidth || 1, H: stage.clientHeight || 1 } : null;
+}
+
 function drawCrop() {
     const c = state.crop;
-    const stage = root?.querySelector('.facets-crop-stage');
     const imgEl = root?.querySelector('.facets-crop-img');
-    if (!c || !stage || !imgEl) return;
-    const S = stage.clientWidth;
+    const st = stageSize();
+    if (!c || !imgEl || !st) return;
+    const { W, H } = st;
     const w = c.img.naturalWidth, h = c.img.naturalHeight;
-    const fit = S / Math.max(w, h);
+    const fit = Math.min(W / w, H / h);
     const dw = w * fit * c.crop.scale, dh = h * fit * c.crop.scale;
     imgEl.style.width = `${dw}px`;
     imgEl.style.height = `${dh}px`;
-    imgEl.style.left = `${(S - dw) / 2 + c.crop.x * S}px`;
-    imgEl.style.top = `${(S - dh) / 2 + c.crop.y * S}px`;
+    imgEl.style.left = `${(W - dw) / 2 + c.crop.x * W}px`;
+    imgEl.style.top = `${(H - dh) / 2 + c.crop.y * H}px`;
 }
 
 function setScale(s) {
@@ -495,28 +527,164 @@ function setScale(s) {
     drawCrop();
 }
 
+function freshCrop(img) {
+    return autoCrop(img.naturalWidth, img.naturalHeight, avatarAspect());
+}
+
+/** Re-crop an outfit that is already saved. */
 async function openCrop() {
     const key = activeKey();
     const o = findOutfit(key, state.editId);
     if (!o) return;
     await withBusy(async () => {
         const img = await loadImage(urlOf(o.orig || o.sq));
-        const cover = Math.max(img.naturalWidth, img.naturalHeight) / Math.min(img.naturalWidth, img.naturalHeight);
-        state.crop = { img, cover, crop: o.crop ? { ...o.crop } : autoCrop(img.naturalWidth, img.naturalHeight) };
+        const aspect = avatarAspect();
+        // Keep the old position only if the frame shape is the same.
+        const crop = o.crop && (o.crop.aspect || 1) === aspect ? { ...o.crop, aspect } : freshCrop(img);
+        state.crop = { img, crop, mode: 'recrop' };
         state.screen = 'crop';
     }, () => toast('error', t('load_failed')));
     render();
 }
 
+/** Read the chosen files in the browser (nothing is uploaded yet). */
+async function readPicked(files) {
+    const items = [];
+    for (const file of files) {
+        if (file.type && !file.type.startsWith('image/')) { toast('warning', t('not_image', { name: file.name })); continue; }
+        try {
+            const data = await readAsDataURL(file);
+            const img = await loadImage(data);
+            items.push({ name: (file.name || '').replace(/\.[^.]+$/, '').slice(0, 60), fileName: file.name, data, img });
+        } catch {
+            toast('error', t('not_image', { name: file.name }));
+        }
+    }
+    return items;
+}
+
+/** "Add outfits": crop each picture first, one after another. */
+async function addFiles(files) {
+    const key = activeKey();
+    if (!key || !files?.length) return;
+    let items = [];
+    await withBusy(async () => { items = await readPicked([...files]); });
+    if (!items.length) return;
+    state.crop = { img: items[0].img, crop: freshCrop(items[0].img), mode: 'add', queue: { key, items, index: 0, added: 0 } };
+    state.screen = 'crop';
+    render();
+}
+
+/** "Replace image": crop the new picture first. Going back cancels; nothing is uploaded. */
+async function replaceImage(file) {
+    const key = activeKey();
+    if (!findOutfit(key, state.editId) || !file) return;
+    let items = [];
+    await withBusy(async () => { items = await readPicked([file]); });
+    if (!items.length) return;
+    state.crop = { img: items[0].img, crop: freshCrop(items[0].img), mode: 'replace', queue: { key, items, index: 0, added: 0 } };
+    state.screen = 'crop';
+    render();
+}
+
+async function uploadNewOutfit(key, item, crop) {
+    const e = entityFor(key);
+    const id = newId();
+    const orig = await uploadDataURL(item.data, folderFor(key), id);
+    try {
+        const sq = await uploadDataURL(renderCrop(item.img, crop), folderFor(key), `${id}_sq`);
+        e.outfits.push({ id, name: item.name, desc: '', orig, sq, crop: { ...crop }, pair: null });
+        save();
+    } catch (err) {
+        await deletePath(orig);
+        throw err;
+    }
+}
+
+/** Add the current picture (with the given crop) and move to the next one. */
+async function queueStep(useCrop) {
+    const c = state.crop;
+    const q = c?.queue;
+    if (!q) return;
+    const item = q.items[q.index];
+    await withBusy(async () => {
+        try {
+            await uploadNewOutfit(q.key, item, useCrop || freshCrop(item.img));
+            q.added++;
+        } catch (err) {
+            console.error('[Facets]', err);
+            toast('error', t('upload_failed', { name: item.fileName || item.name }));
+        }
+    });
+    q.index++;
+    if (q.index < q.items.length) {
+        const next = q.items[q.index];
+        state.crop = { img: next.img, crop: freshCrop(next.img), mode: 'add', queue: q };
+    } else {
+        finishQueue();
+    }
+    render();
+}
+
+/** Back / close while adding: keep every picture already chosen, using the automatic crop. */
+async function finishQueueAuto() {
+    const q = state.crop?.queue;
+    if (!q || state.crop.mode !== 'add') return;
+    await withBusy(async () => {
+        while (q.index < q.items.length) {
+            const item = q.items[q.index];
+            try { await uploadNewOutfit(q.key, item, freshCrop(item.img)); q.added++; } catch (err) {
+                console.error('[Facets]', err);
+                toast('error', t('upload_failed', { name: item.fileName || item.name }));
+            }
+            q.index++;
+        }
+    });
+    finishQueue();
+}
+
+function finishQueue() {
+    const q = state.crop?.queue;
+    if (q?.added) toast('success', t('added', { n: q.added }));
+    state.crop = null;
+    state.screen = 'organize';
+    applyAllSoon();
+}
+
 async function applyCrop() {
+    const c = state.crop;
+    if (!c) return;
+    if (c.mode === 'add') return queueStep({ ...c.crop });
     const key = activeKey();
     const o = findOutfit(key, state.editId);
-    const c = state.crop;
-    if (!o || !c) return;
+    if (!o) return;
+    if (c.mode === 'replace') {
+        const item = c.queue.items[0];
+        await withBusy(async () => {
+            const id = newId();
+            const orig = await uploadDataURL(item.data, folderFor(key), `${o.id}_${id}`);
+            let sq;
+            try {
+                sq = await uploadDataURL(renderCrop(item.img, c.crop), folderFor(key), `${o.id}_${id}_sq`);
+            } catch (err) { await deletePath(orig); throw err; }
+            const old = [o.orig, o.sq];
+            Object.assign(o, { orig, sq, crop: { ...c.crop } });
+            save();
+            let failed = false;
+            for (const p of old) if (p && !(await deletePath(p))) failed = true;
+            save();
+            if (failed) toast('warning', t('delete_failed'));
+            state.crop = null;
+            state.screen = 'edit';
+            applyAllSoon();
+            toast('success', t('saved'));
+        }, () => toast('error', t('upload_failed', { name: item.fileName || item.name })));
+        render();
+        return;
+    }
     await withBusy(async () => {
-        const data = renderCrop(c.img, c.crop);
         const oldSq = o.sq;
-        const path = await uploadDataURL(data, folderFor(key), `${o.id}_sq_${newId()}`);
+        const path = await uploadDataURL(renderCrop(c.img, c.crop), folderFor(key), `${o.id}_sq_${newId()}`);
         o.sq = path;
         o.crop = { ...c.crop };
         save();
@@ -620,7 +788,7 @@ function attachCropGestures() {
         cropPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const stage = root.querySelector('.facets-crop-stage');
         if (!stage || !cropStart) return;
-        const S = stage.clientWidth || 1;
+        const W = stage.clientWidth || 1, H = stage.clientHeight || 1;
         const pts = [...cropPointers.values()];
         const c = state.crop.crop;
         if (pts.length >= 2 && cropStart.dist) {
@@ -629,8 +797,8 @@ function attachCropGestures() {
             const r = root.querySelector('.facets-range');
             if (r) r.value = String(scaleToRange(c.scale));
         } else {
-            c.x = cropStart.x + (pts[0].x - cropStart.px) / S;
-            c.y = cropStart.y + (pts[0].y - cropStart.py) / S;
+            c.x = cropStart.x + (pts[0].x - cropStart.px) / W;
+            c.y = cropStart.y + (pts[0].y - cropStart.py) / H;
         }
         drawCrop();
     });
@@ -688,69 +856,6 @@ function wear(outfitId) {
     render();
 }
 
-async function addFiles(files) {
-    const key = activeKey();
-    if (!key || !files?.length) return;
-    const list = [...files];
-    await withBusy(async () => {
-        if (list.length > 3) toast('info', t('uploading', { n: list.length }));
-        const e = entityFor(key);
-        let added = 0;
-        for (const file of list) {
-            const stem = (file.name || '').replace(/\.[^.]+$/, '').slice(0, 60);
-            if (file.type && !file.type.startsWith('image/')) { toast('warning', t('not_image', { name: file.name })); continue; }
-            const id = newId();
-            let orig = null;
-            try {
-                const data = await readAsDataURL(file);
-                const img = await loadImage(data);
-                const crop = autoCrop(img.naturalWidth, img.naturalHeight);
-                orig = await uploadDataURL(data, folderFor(key), id);
-                const sq = await uploadDataURL(renderCrop(img, crop), folderFor(key), `${id}_sq`);
-                e.outfits.push({ id, name: stem, desc: '', orig, sq, crop, pair: null });
-                added++;
-                save();
-                render();
-            } catch (err) {
-                console.error('[Facets]', err);
-                if (orig) await deletePath(orig);
-                toast('error', t('upload_failed', { name: file.name }));
-            }
-        }
-        save();
-        if (added) toast('success', t('added', { n: added }));
-        applyAllSoon();
-    });
-    render();
-}
-
-async function replaceImage(file) {
-    const key = activeKey();
-    const o = findOutfit(key, state.editId);
-    if (!o || !file) return;
-    await withBusy(async () => {
-        const data = await readAsDataURL(file);
-        const img = await loadImage(data);
-        const crop = autoCrop(img.naturalWidth, img.naturalHeight);
-        const id = newId();
-        const orig = await uploadDataURL(data, folderFor(key), `${o.id}_${id}`);
-        let sq;
-        try {
-            sq = await uploadDataURL(renderCrop(img, crop), folderFor(key), `${o.id}_${id}_sq`);
-        } catch (err) { await deletePath(orig); throw err; }
-        const old = [o.orig, o.sq];
-        Object.assign(o, { orig, sq, crop });
-        save();
-        let failed = false;
-        for (const p of old) if (p && !(await deletePath(p))) failed = true;
-        save();
-        if (failed) toast('warning', t('delete_failed'));
-        applyAllSoon();
-        toast('success', t('saved'));
-    }, () => toast('error', t('upload_failed', { name: file.name })));
-    render();
-}
-
 async function deleteOutfit() {
     const key = activeKey();
     const e = getEntity(key);
@@ -791,9 +896,9 @@ function onClick(e) {
     if (e.target.closest('[data-drag]')) return; // the drag handle never opens the editor
     const act = el.dataset.act;
     if (el.tagName === 'SELECT' || el.tagName === 'INPUT') return;
-    if (state.busy && !['close', 'full-close'].includes(act)) { toast('info', t('busy')); return; }
+    if (state.busy && act !== 'full-close') { toast('info', t('busy')); return; }
     switch (act) {
-        case 'close': closeWardrobe(); break;
+        case 'close': requestClose(); break;
         case 'back': back(); break;
         case 'tab': state.tab = el.dataset.tab; state.screen = 'wardrobe'; render(); break;
         case 'settings': state.screen = 'settings'; render(); break;
@@ -807,7 +912,8 @@ function onClick(e) {
         case 'full-close': root.querySelector('.facets-full')?.remove(); break;
         case 'crop': openCrop(); break;
         case 'crop-apply': applyCrop(); break;
-        case 'crop-reset': if (state.crop) { state.crop.crop = autoCrop(state.crop.img.naturalWidth, state.crop.img.naturalHeight); setScale(state.crop.crop.scale); } break;
+        case 'crop-reset': if (state.crop) { state.crop.crop = freshCrop(state.crop.img); setScale(state.crop.crop.scale); } break;
+        case 'crop-skip': queueStep(null); break;
         case 'zoom-in': if (state.crop) setScale(state.crop.crop.scale * 1.15); break;
         case 'zoom-out': if (state.crop) setScale(state.crop.crop.scale / 1.15); break;
         case 'pair': state.pairTarget = ''; state.screen = 'pair'; render(); break;

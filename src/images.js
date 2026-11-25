@@ -93,30 +93,57 @@ export async function deletePath(path) {
 }
 
 /**
- * Crop settings: the picture is drawn at `scale` (1 = whole picture fits inside the square)
- * and moved by (x, y) as a fraction of the square size from the centre.
- * @typedef {{ scale: number, x: number, y: number }} Crop
+ * Crop settings. The frame has an aspect (width / height): 1 = square, 2/3 = tall.
+ * The picture is drawn at `scale` (1 = whole picture fits inside the frame) and moved by
+ * (x, y) as fractions of the frame width / height from the centre.
+ * @typedef {{ scale: number, x: number, y: number, aspect: number }} Crop
  */
 
-/** A first guess: fill the square, keep the top (faces are usually near the top). */
-export function autoCrop(w, h) {
-    const cover = Math.max(w, h) / Math.min(w, h); // scale that fills the square
-    const drawnH = (h / Math.max(w, h)) * cover;    // picture height in square units
-    const y = h > w ? (drawnH - 1) / 2 : 0;         // align top edge with the square
-    return { scale: cover, x: 0, y };
+/** Frame shape that matches SillyTavern's avatar style: tall for "Rectangle", square otherwise. */
+export function avatarAspect() {
+    return document.body?.classList.contains('big-avatars') ? 2 / 3 : 1;
 }
 
-/** Render a crop to a square data URL (webp, transparent outside the picture). */
-export function renderCrop(img, crop, size = SQ_SIZE) {
+/** Avatar style name, used only for the guide drawn on the crop frame. */
+export function avatarStyle() {
+    const b = document.body?.classList;
+    if (b?.contains('big-avatars')) return 'rect';
+    if (b?.contains('square-avatars')) return 'square';
+    if (b?.contains('rounded-avatars')) return 'rounded';
+    return 'round';
+}
+
+/** Scale at which the picture just fills the frame. */
+export function coverScale(w, h, aspect = 1) {
+    const FW = 1, FH = 1 / aspect;
+    const fit = Math.min(FW / w, FH / h);
+    return Math.max(FW / (w * fit), FH / (h * fit));
+}
+
+/** A first guess: fill the frame, keep the top (faces are usually near the top). */
+export function autoCrop(w, h, aspect = 1) {
+    const FW = 1, FH = 1 / aspect;
+    const fit = Math.min(FW / w, FH / h);
+    const scale = coverScale(w, h, aspect);
+    const dh = h * fit * scale;
+    const y = Math.max(0, (dh - FH) / (2 * FH));
+    return { scale, x: 0, y, aspect };
+}
+
+/** Render a crop to a data URL (webp, transparent outside the picture). */
+export function renderCrop(img, crop, base = SQ_SIZE) {
+    const aspect = crop.aspect || 1;
+    const OW = Math.round(aspect >= 1 ? base : base * aspect * 1.2);
+    const OH = Math.round(OW / aspect);
     const c = document.createElement('canvas');
-    c.width = size; c.height = size;
+    c.width = OW; c.height = OH;
     const g = c.getContext('2d');
     g.imageSmoothingQuality = 'high';
     const w = img.naturalWidth, h = img.naturalHeight;
-    const fit = size / Math.max(w, h);
+    const fit = Math.min(OW / w, OH / h);
     const dw = w * fit * crop.scale, dh = h * fit * crop.scale;
-    const dx = (size - dw) / 2 + crop.x * size;
-    const dy = (size - dh) / 2 + crop.y * size;
+    const dx = (OW - dw) / 2 + crop.x * OW;
+    const dy = (OH - dh) / 2 + crop.y * OH;
     g.drawImage(img, dx, dy, dw, dh);
     let out = c.toDataURL('image/webp', 0.9);
     if (!out.startsWith('data:image/webp')) out = c.toDataURL('image/png');

@@ -12,9 +12,9 @@ import {
     initPersonaSource, setPersonaHint, applyAllSoon, updatePrompt, fixZoom,
     startObservers, currentScene,
 } from './src/apply.js';
-import { openWardrobe, refreshIfOpen, setVersion, isOpen, closeWardrobe, rerender } from './src/ui.js';
+import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender } from './src/ui.js';
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 setVersion(VERSION);
 
 function langOptions() {
@@ -177,7 +177,7 @@ async function init() {
     applyAllSoon();
     document.addEventListener('facets:lang', () => { mountSettingsPanel(); mountWand(); });
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isOpen() && !document.querySelector('dialog[open]')) closeWardrobe();
+        if (e.key === 'Escape' && isOpen() && !document.querySelector('dialog[open]')) requestClose();
     });
 }
 

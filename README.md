@@ -13,7 +13,7 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
   - Every message avatar in the chat changes, including older messages.
   - *Whole character* applies to all of that character's chats, including new ones.
 - **Default look** brings back the original avatar.
-- **Fit to square.** Drag to move, and zoom *out* to fit the upper body (or more) into the small avatar. The chat shows the square; SillyTavern's zoomed avatar shows the full picture.
+- **Crop first.** When you add pictures, each one opens in the crop screen (or tap *Skip* to use the automatic crop). Drag to move, and zoom *out* to fit the upper body (or more) into the small avatar. The frame follows SillyTavern's avatar shape: square for Circle/Square/Rounded, tall (2:3) for Rectangle. The chat shows the cropped picture; SillyTavern's zoomed avatar shows the full picture.
 - **Matching sets.** Pair a character outfit with a persona outfit; changing one changes the other.
 - **Tell the AI.** Each outfit has a *look description* (e.g. "black suit, hair slicked back"). The current descriptions are added to the prompt through SillyTavern's extension prompt (can be turned off).
 - **Where it shows:** chat message avatars and the character list (each can be turned off).
@@ -30,10 +30,10 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 
 - In a one-on-one chat: **wand menu → Open Wardrobe**.
 - Without a chat: **Extensions → Facets → Open Wardrobe** (organize outfits, or change the look for the whole character).
-- **Organize** → **Add outfits** to upload. Drag the handle to reorder; tap an outfit to edit its name, look description, square crop, matching set, or to delete it.
+- **Organize** → **Add outfits**, crop each picture (or *Skip*). Going back or closing keeps the remaining pictures with the automatic crop. Drag the handle to reorder; tap an outfit to edit its name, look description, crop, matching set, or to delete it.
 - ⚙ inside the wardrobe: where to show, *Tell the AI*, language, backup, delete all data, version.
 
-**Tip — avatar shape.** SillyTavern's chat avatars are small. In **User Settings → Theme → Avatars**, *Square* or *Rounded* shows more of the picture than *Circle*. *Rectangle* cuts the sides off square pictures.
+**Tip — avatar shape.** SillyTavern's chat avatars are small. In **User Settings → Theme → Avatars**, *Square* or *Rounded* shows more of the picture than *Circle*. With *Rectangle*, Facets crops tall (2:3). If you change the avatar shape later, pictures cropped for the old shape may be cut a little — just crop those outfits again.
 
 ## How it stores data (and what it never touches)
 

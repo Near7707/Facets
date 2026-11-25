@@ -83,6 +83,9 @@
         state.personaMod = await import('/scripts/personas.js');
         state.personaMod._setUserAvatar(state.persona);
         document.addEventListener('DOMContentLoaded', () => { });
+        const av = params.get('avstyle');
+        if (av === 'rect') document.body.classList.add('big-avatars');
+        if (av === 'square') document.body.classList.add('square-avatars');
         const theme = params.get('theme');
         if (theme === 'light') {
             document.getElementById('theme_override').textContent = `:root{--SmartThemeBodyColor:rgb(40,40,40);--SmartThemeBlurTintColor:rgba(235,232,224,0.85);--SmartThemeBorderColor:rgba(0,0,0,0.25);--SmartThemeQuoteColor:rgb(200,120,20);--SmartThemeEmColor:rgb(90,90,90)} body{background:#f3efe6;color:#222}`;
