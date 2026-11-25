@@ -2,7 +2,7 @@
 
 import { t, LANGUAGES, setLanguage, getLanguage } from './i18n.js';
 import {
-    ctx, settings, save, getEntity, findOutfit, choose, chatChoice, effectiveOutfit,
+    ctx, settings, save, chooseLang, getEntity, findOutfit, choose, chatChoice, effectiveOutfit,
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
 } from './store.js';
 import {
@@ -121,6 +121,11 @@ export function closeWardrobe() {
 }
 
 export function isOpen() { return state.open; }
+
+/** Redraw whatever screen is open (used after a language change from outside). */
+export function rerender() {
+    if (state.open && !state.busy && state.screen !== 'crop') render();
+}
 
 export function refreshIfOpen() {
     if (state.open && !state.busy && ['wardrobe', 'organize'].includes(state.screen)) render();
@@ -852,7 +857,7 @@ function onChange(e) {
             render(); break;
         case 'pair-target': state.pairTarget = el.value; render(); break;
         case 'lang':
-            settings().lang = el.value; setLanguage(el.value); save(); render();
+            chooseLang(el.value); setLanguage(el.value); render();
             document.dispatchEvent(new CustomEvent('facets:lang'));
             break;
         case 'add-files': { const f = el.files; addFiles(f).finally(() => { el.value = ''; }); break; }

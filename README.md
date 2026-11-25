@@ -18,8 +18,8 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 - **Tell the AI.** Each outfit has a *look description* (e.g. "black suit, hair slicked back"). The current descriptions are added to the prompt through SillyTavern's extension prompt (can be turned off).
 - **Where it shows:** chat message avatars and the character list (each can be turned off).
 - **Backup and import** to move to another device (picture files can be included).
-- **Clean up data** removes every picture Facets uploaded and all Facets settings.
-- English and Korean.
+- **Delete all Facets data** removes every picture Facets uploaded and all Facets settings.
+- English and Korean. Starts in SillyTavern's language (Korean, otherwise English); change it in ⚙ or in Extensions → Facets.
 
 ## Install
 
@@ -31,14 +31,14 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 - In a one-on-one chat: **wand menu → Open Wardrobe**.
 - Without a chat: **Extensions → Facets → Open Wardrobe** (organize outfits, or change the look for the whole character).
 - **Organize** → **Add outfits** to upload. Drag the handle to reorder; tap an outfit to edit its name, look description, square crop, matching set, or to delete it.
-- ⚙ inside the wardrobe: where to show, *Tell the AI*, language, backup, clean up, version.
+- ⚙ inside the wardrobe: where to show, *Tell the AI*, language, backup, delete all data, version.
 
 **Tip — avatar shape.** SillyTavern's chat avatars are small. In **User Settings → Theme → Avatars**, *Square* or *Rounded* shows more of the picture than *Circle*. *Rectangle* cuts the sides off square pictures.
 
 ## How it stores data (and what it never touches)
 
 - Outfit lists, per-chat choices and matching sets are saved in **Facets' own extension settings**.
-- Pictures go to `user/images/Facets_<character>/` through SillyTavern's image API. Facets keeps a list of every file it uploaded, and *Clean up data* deletes only those.
+- Pictures go to `user/images/Facets_<character>/` through SillyTavern's image API. Facets keeps a list of every file it uploaded, and *Delete all Facets data* deletes only those.
 - Facets **does not** patch `window.fetch`, and **does not** write anything into character cards, chat files or chat metadata.
 - Character rename/delete, persona delete, and chat rename/delete are followed through SillyTavern's events.
 

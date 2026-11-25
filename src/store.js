@@ -7,6 +7,7 @@ export const DEFAULT_MARK = '__default__';
 const DEFAULTS = Object.freeze({
     format: FORMAT,
     lang: 'en',
+    langChosen: false, // false = follow SillyTavern's language
     showInChat: true,
     showInList: true,
     tellAI: true,
@@ -59,6 +60,22 @@ export function migrate(s) {
     return s;
 }
 
+/** UI language: the user's own pick, or SillyTavern's language (Korean → ko, anything else → en). */
+export function uiLang() {
+    const s = settings();
+    if (s.langChosen && s.lang) return s.lang;
+    let loc = '';
+    try { loc = String(ctx().getCurrentLocale?.() || ''); } catch { /* ignore */ }
+    return /^ko/i.test(loc) ? 'ko' : 'en';
+}
+
+export function chooseLang(lang) {
+    const s = settings();
+    s.lang = lang;
+    s.langChosen = true;
+    save();
+}
+
 export function save() {
     ctx().saveSettingsDebounced();
 }
@@ -66,8 +83,10 @@ export function save() {
 export function resetAll() {
     const c = ctx();
     const lang = c.extensionSettings[MODULE]?.lang ?? 'en';
+    const langChosen = !!c.extensionSettings[MODULE]?.langChosen;
     c.extensionSettings[MODULE] = structuredClone(DEFAULTS);
     c.extensionSettings[MODULE].lang = lang;
+    c.extensionSettings[MODULE].langChosen = langChosen;
     save();
 }
 

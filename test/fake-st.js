@@ -24,8 +24,9 @@
     if (params.get('lang')) {
         extensionSettings.facets = extensionSettings.facets || {};
         extensionSettings.facets.lang = params.get('lang');
+        extensionSettings.facets.langChosen = true;
     }
-    if (params.has('fresh')) { for (const k of Object.keys(extensionSettings)) delete extensionSettings[k]; if (params.get('lang')) extensionSettings.facets = { lang: params.get('lang') }; }
+    if (params.has('fresh')) { for (const k of Object.keys(extensionSettings)) delete extensionSettings[k]; if (params.get('lang')) extensionSettings.facets = { lang: params.get('lang'), langChosen: true }; }
     const prompts = {};
     const state = { characterId: params.has('nochat') ? undefined : 0, personaMod: null, persona: 'juno.png' };
 
@@ -33,6 +34,7 @@
         characters, extensionSettings, eventSource, eventTypes, event_types: eventTypes,
         get characterId() { return state.characterId; },
         groupId: null,
+        getCurrentLocale: () => params.get('stlocale') || 'en',
         name1: 'Juno',
         powerUserSettings: { personas },
         getCurrentChatId: () => characters[state.characterId]?.chat,

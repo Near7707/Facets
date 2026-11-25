@@ -2,9 +2,9 @@
 // Uses only SillyTavern's public paths: getContext, events, extension prompts and the image API.
 // It never patches window.fetch and never writes to character cards, chat files or chat metadata.
 
-import { t, setLanguage } from './src/i18n.js';
+import { t, setLanguage, getLanguage, LANGUAGES } from './src/i18n.js';
 import {
-    ctx, settings, save, charKey, personaKey, removeEntity,
+    ctx, settings, save, uiLang, chooseLang, charKey, personaKey, removeEntity,
     onCharacterRenamed, onChatRenamed, onChatDeleted,
 } from './src/store.js';
 import { deletePath } from './src/images.js';
@@ -12,10 +12,14 @@ import {
     initPersonaSource, setPersonaHint, applyAllSoon, updatePrompt, fixZoom,
     startObservers, currentScene,
 } from './src/apply.js';
-import { openWardrobe, refreshIfOpen, setVersion, isOpen, closeWardrobe } from './src/ui.js';
+import { openWardrobe, refreshIfOpen, setVersion, isOpen, closeWardrobe, rerender } from './src/ui.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 setVersion(VERSION);
+
+function langOptions() {
+    return LANGUAGES.map(l => `<option value="${l.id}"${l.id === getLanguage() ? ' selected' : ''}>${l.label}</option>`).join('');
+}
 
 function settingsPanelHtml() {
     return `
@@ -29,6 +33,10 @@ function settingsPanelHtml() {
           <button type="button" class="menu_button facets-panel-open" data-facets-open>
             <i class="fa-solid fa-shirt"></i><span>${t('open_wardrobe')}</span>
           </button>
+          <label class="facets-panel-lang">
+            <span>${t('language')}</span>
+            <select class="text_pole facets-panel-select" data-facets-lang>${langOptions()}</select>
+          </label>
           <div class="facets-panel-version">${t('version', { v: VERSION })}</div>
         </div>
       </div>`;
@@ -47,11 +55,21 @@ function mountSettingsPanel() {
         panel.addEventListener('click', (e) => {
             if (e.target.closest('[data-facets-open]')) openWardrobe({ fromSettings: true });
         });
+        panel.addEventListener('change', (e) => {
+            const sel = e.target.closest('[data-facets-lang]');
+            if (!sel) return;
+            chooseLang(sel.value);
+            setLanguage(sel.value);
+            document.dispatchEvent(new CustomEvent('facets:lang'));
+            rerender();
+        });
     } else {
         // Language change: refresh only the text, keep the drawer open/closed as it is.
         panel.querySelector('.inline-drawer-header b').textContent = t('ext_name');
         panel.querySelector('.facets-panel-hint').textContent = t('settings_hint');
         panel.querySelector('.facets-panel-open span').textContent = t('open_wardrobe');
+        panel.querySelector('.facets-panel-lang span').textContent = t('language');
+        panel.querySelector('[data-facets-lang]').innerHTML = langOptions();
         panel.querySelector('.facets-panel-version').textContent = t('version', { v: VERSION });
     }
 }
@@ -148,8 +166,8 @@ function registerZoomFix() {
 }
 
 async function init() {
-    const s = settings();
-    setLanguage(s.lang);
+    settings();
+    setLanguage(uiLang());
     await initPersonaSource();
     mountSettingsPanel();
     mountWand();
