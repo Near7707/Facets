@@ -10,7 +10,7 @@ const DEFAULTS = Object.freeze({
     langChosen: false, // false = follow SillyTavern's language
     showInChat: true,
     showInList: true,
-    tellAI: true,
+    tellAI: false, // off until the user turns it on
     backupImages: true,
     // key -> { name, outfits: Outfit[], global: outfitId|null }
     // key is "char:<avatar file>" or "persona:<avatar file>"

@@ -263,6 +263,7 @@ function viewWardrobe() {
     const tiles = [tileHtml({ key, outfit: null, selected: !shown, mode: 'wear' })]
         .concat(e.outfits.map((o, i) => tileHtml({ key, outfit: o, index: i, selected: shown?.id === o.id, mode: 'wear' })));
     let body = `<div class="facets-status" title="${esc(status)}">${esc(status)}</div>
+        <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}</div>
         <div class="facets-grid">${tiles.join('')}</div>`;
     if (!e.outfits.length) {
         body += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-title">${esc(t('empty_title'))}</div><div class="facets-empty-body">${esc(t('empty_body'))}</div></div>`;
@@ -280,9 +281,15 @@ function viewWardrobe() {
     const foot = `${seg}
       <div class="facets-row">
         <button type="button" class="facets-btn" data-act="wear-default" title="${esc(t('default_look'))}">${esc(t('default_look'))}</button>
+        ${addButton()}
         <button type="button" class="facets-btn facets-primary" data-act="organize" title="${esc(t('organize'))}">${esc(t('organize'))}</button>
       </div>`;
     return [head, body, foot];
+}
+
+function addButton() {
+    return `<label class="facets-btn" role="button" tabindex="0" title="${esc(t('add_outfit'))}"><i class="fa-solid fa-plus"></i><span>${esc(t('add_short'))}</span>
+        <input type="file" accept="image/*" multiple class="facets-file" data-act="add-files" hidden></label>`;
 }
 
 function tileHtml({ key, outfit, index = 0, selected = false, mode }) {
@@ -294,6 +301,8 @@ function tileHtml({ key, outfit, index = 0, selected = false, mode }) {
     const handle = mode === 'organize' && !isDefault
         ? `<span class="facets-handle" data-drag="${esc(outfit.id)}" title="${esc(t('drag_handle'))}" aria-label="${esc(t('drag_handle'))}"><i class="fa-solid fa-grip-vertical"></i></span>` : '';
     const pen = mode === 'organize' && !isDefault ? `<span class="facets-pen" aria-hidden="true"><i class="fa-solid fa-pen"></i></span>` : '';
+    const trash = mode === 'organize' && !isDefault
+        ? `<button type="button" class="facets-trash" data-act="delete-tile" data-id="${esc(outfit.id)}" title="${esc(t('delete_outfit'))}" aria-label="${esc(t('delete_outfit'))}"><i class="fa-solid fa-trash-can"></i></button>` : '';
     return `<div class="facets-tile${selected ? ' on' : ''}${isDefault ? ' is-default' : ''}${mode === 'organize' && isDefault ? ' is-locked' : ''}"
         ${outfit ? `data-id="${esc(outfit.id)}"` : ''} ${act ? `data-act="${act}" role="button" tabindex="0"` : ''}
         title="${esc(label)}">
@@ -301,7 +310,7 @@ function tileHtml({ key, outfit, index = 0, selected = false, mode }) {
         ${isDefault ? `<span class="facets-badge">${esc(t('badge_default'))}</span>` : ''}
         ${selected && mode === 'wear' ? `<span class="facets-check" aria-hidden="true"><i class="fa-solid fa-check"></i></span>` : ''}
         ${paired ? `<span class="facets-ring" aria-hidden="true"><i class="fa-solid fa-link"></i></span>` : ''}
-        ${handle}${pen}
+        ${handle}${pen}${trash}
         <div class="facets-label">${esc(label)}</div>
       </div>`;
 }
@@ -319,7 +328,7 @@ function viewOrganize() {
         <input type="file" accept="image/*" multiple class="facets-file" data-act="add-files" hidden>
       </label>`);
     const body = `<div class="facets-grid facets-organize">${tiles.join('')}</div>`;
-    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="done">${esc(t('done'))}</button></div>`;
+    const foot = `<div class="facets-row">${addButton()}<button type="button" class="facets-btn facets-primary" data-act="done">${esc(t('done'))}</button></div>`;
     return [head, body, foot];
 }
 
@@ -570,7 +579,8 @@ async function addFiles(files) {
     let items = [];
     await withBusy(async () => { items = await readPicked([...files]); });
     if (!items.length) return;
-    state.crop = { img: items[0].img, crop: freshCrop(items[0].img), mode: 'add', queue: { key, items, index: 0, added: 0 } };
+    const from = state.screen === 'wardrobe' ? 'wardrobe' : 'organize';
+    state.crop = { img: items[0].img, crop: freshCrop(items[0].img), mode: 'add', queue: { key, items, index: 0, added: 0, from } };
     state.screen = 'crop';
     render();
 }
@@ -647,7 +657,7 @@ function finishQueue() {
     const q = state.crop?.queue;
     if (q?.added) toast('success', t('added', { n: q.added }));
     state.crop = null;
-    state.screen = 'organize';
+    state.screen = q?.from || 'organize';
     applyAllSoon();
 }
 
@@ -856,10 +866,10 @@ function wear(outfitId) {
     render();
 }
 
-async function deleteOutfit() {
+async function deleteOutfit(id = state.editId) {
     const key = activeKey();
     const e = getEntity(key);
-    const o = findOutfit(key, state.editId);
+    const o = findOutfit(key, id);
     if (!o || !e) return;
     const name = outfitLabel(o, e.outfits.indexOf(o));
     if (!(await confirmBox(t('confirm_delete_outfit', { name }), t('delete')))) return;
@@ -934,6 +944,7 @@ function onClick(e) {
             state.draft = null; state.screen = 'organize'; render(); break;
         }
         case 'delete-outfit': deleteOutfit(); break;
+        case 'delete-tile': deleteOutfit(el.dataset.id); break;
         case 'backup': withBusy(() => exportBackup(toast)); break;
         case 'cleanup': runCleanup(); break;
     }

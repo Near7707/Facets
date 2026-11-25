@@ -158,6 +158,43 @@ export function applyList() {
     }
 }
 
+/** Welcome screen "recent chats": each row shows the look of that chat. */
+export function applyRecent() {
+    const s = settings();
+    for (const row of document.querySelectorAll('#chat .recentChat')) {
+        const img = row.querySelector('.avatar img');
+        if (!img) continue;
+        const avatar = row.getAttribute('data-avatar');
+        if (!s.showInList || row.classList.contains('group') || !avatar) {
+            if (img.dataset.facetsApplied) restoreImg(img);
+            continue;
+        }
+        const file = String(row.getAttribute('data-file') || '').replace(/\.jsonl$/, '');
+        const key = charKey(avatar);
+        setImg(img, key, effectiveOutfit(key, chatKeyFor(avatar, file)));
+    }
+}
+
+/** The big picture on the character's info page shows the "whole character" look. */
+export function applyPreview() {
+    const img = document.getElementById('avatar_load_preview');
+    if (!img) return;
+    const now = img.getAttribute('src') || '';
+    if (img.dataset.facetsApplied && now !== img.dataset.facetsApplied) {
+        // SillyTavern put a new picture here (another character, or a new avatar being uploaded).
+        delete img.dataset.facetsApplied;
+        delete img.dataset.facetsKey;
+        delete img.dataset.facetsOutfit;
+        img.classList.remove('facets-avatar');
+    }
+    const key = settings().showInList ? keyFromSrc(originalSrc(img)) : null;
+    if (!key || !key.startsWith('char:')) {
+        if (img.dataset.facetsApplied) restoreImg(img);
+        return;
+    }
+    setImg(img, key, effectiveOutfit(key, null));
+}
+
 export function restoreEverything() {
     document.querySelectorAll('img.facets-avatar').forEach(restoreImg);
 }
@@ -167,7 +204,7 @@ export function applyAllSoon() {
     if (raf) return;
     raf = requestAnimationFrame(() => {
         raf = 0;
-        try { applyChat(); applyList(); updatePrompt(); } catch (e) { console.error('[Facets]', e); }
+        try { applyChat(); applyList(); applyRecent(); applyPreview(); updatePrompt(); } catch (e) { console.error('[Facets]', e); }
     });
 }
 
@@ -184,7 +221,11 @@ export function updatePrompt() {
             if (po?.desc?.trim()) lines.push(`${personaName(scene.personaAvatar)}: ${po.desc.trim()}`);
         }
     }
-    const text = lines.length ? `[Current appearance]\n${lines.join('\n')}` : '';
+    const text = lines.length
+        ? `[Appearance reference]\n${lines.join('\n')}\n`
+          + '(Default look for reference only. If the story has shown a change of clothes or appearance, follow the story. '
+          + 'Mention the look only when it matters to the scene; do not bring it up on its own.)'
+        : '';
     // 0 = in prompt (after the story string), depth 0, no world-info scan, system role.
     c.setExtensionPrompt(PROMPT_KEY, text, 0, 0, false, 0);
 }
@@ -196,12 +237,19 @@ export function fixZoom(avatarEl) {
     const outfit = findOutfit(img.dataset.facetsKey, img.dataset.facetsOutfit);
     if (!outfit) return;
     const full = urlOf(outfit.orig || outfit.sq);
-    const zooms = document.querySelectorAll('.zoomed_avatar img');
-    const target = zooms[zooms.length - 1];
-    if (target) {
-        target.setAttribute('src', full);
-        target.setAttribute('data-izoomify-url', full);
-    }
+    // The hidden template also has a .zoomed_avatar; the newest real one is last.
+    const boxes = [...document.querySelectorAll('.zoomed_avatar')].filter(z => !z.closest('.template_element'));
+    const target = boxes[boxes.length - 1]?.querySelector('img');
+    if (!target) return;
+    const $ = globalThis.jQuery;
+    const box = target.closest('.zoomed_avatar_container');
+    // The magnifier remembers the picture it started with and puts it back on mouse-out.
+    // Turn it off, swap the picture, and turn it on again so it remembers the outfit.
+    const magnifier = !!(ctx().powerUserSettings?.zoomed_avatar_magnification && $ && box && $.fn?.izoomify);
+    if (magnifier) $(box).trigger('izoomify.destroy');
+    target.setAttribute('src', full);
+    target.setAttribute('data-izoomify-url', full);
+    if (magnifier) $(box).izoomify();
 }
 
 let observers = [];
@@ -216,13 +264,13 @@ export function startObservers() {
             for (const m of list) {
                 if (m.type === 'attributes') {
                     const img = m.target;
-                    if (!(img instanceof HTMLImageElement) || !img.closest('.avatar')) continue;
+                    if (!(img instanceof HTMLImageElement) || !(img.closest('.avatar') || img.id === 'avatar_load_preview')) continue;
                     if (img.dataset.facetsApplied === img.getAttribute('src')) continue;
                     applyAllSoon();
                     return;
                 }
                 for (const n of m.addedNodes) {
-                    if (n.nodeType === 1 && (n.matches('.mes, .avatar, [data-chid]') || n.querySelector('.avatar img'))) {
+                    if (n.nodeType === 1 && (n.matches('.mes, .avatar, [data-chid], .recentChat') || n.querySelector('.avatar img'))) {
                         applyAllSoon();
                         return;
                     }
@@ -234,6 +282,7 @@ export function startObservers() {
     };
     watch('#chat');
     watch('#rm_print_characters_block');
+    watch('#avatar_load_preview');
 }
 
 export function stopObservers() {

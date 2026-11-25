@@ -14,7 +14,7 @@ import {
 } from './src/apply.js';
 import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender } from './src/ui.js';
 
-export const VERSION = '0.1.2';
+export const VERSION = '0.1.3';
 setVersion(VERSION);
 
 function langOptions() {
@@ -84,19 +84,12 @@ function mountWand() {
         item.className = 'list-group-item flex-container flexGap5 interactable';
         item.tabIndex = 0;
         item.innerHTML = '<div class="fa-solid fa-shirt extensionsMenuExtensionButton"></div><span></span>';
-        item.addEventListener('click', () => openWardrobe({ fromSettings: false }));
+        // Inside a one-on-one chat it opens for that chat; anywhere else it opens with the pickers.
+        item.addEventListener('click', () => openWardrobe({ fromSettings: !currentScene().chatKey }));
         menu.appendChild(item);
     }
-    item.querySelector('span').textContent = t('open_wardrobe');
-    updateWand();
-}
-
-function updateWand() {
-    const item = document.getElementById('facets_wand');
-    if (!item) return;
-    const sc = currentScene();
-    // Only inside a one-on-one chat.
-    item.style.display = sc.chatKey ? '' : 'none';
+    item.querySelector('span').textContent = t('ext_name');
+    item.title = t('open_wardrobe');
 }
 
 async function removeFiles(paths) {
@@ -110,7 +103,6 @@ function registerEvents() {
     const on = (name, fn) => { if (name) eventSource.on(name, fn); };
 
     on(ev.CHAT_CHANGED, () => {
-        updateWand();
         applyAllSoon();
         if (isOpen()) refreshIfOpen();
     });
