@@ -42,6 +42,7 @@ const DEFAULTS = Object.freeze({
     randoms: {},
     // Pictures pinned in one chat (0.6.1): chatKey -> { entityKey: Pin[] }
     pins: {},
+    pinMemo: {},
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -78,7 +79,7 @@ export function migrate(s) {
     if (typeof s.format !== 'number') s.format = FORMAT;
     // Future format upgrades go here: if (s.format < 2) { ...; s.format = 2; }
     if (!Array.isArray(s.files)) s.files = [];
-    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins']) {
+    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo']) {
         if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
     }
     for (const [ck, row] of Object.entries(s.pins)) {
@@ -89,6 +90,20 @@ export function migrate(s) {
             if (clean.length) { row[ek] = clean; cleaned.add(clean); } else delete row[ek];
         }
         if (!Object.keys(row).length) delete s.pins[ck];
+    }
+    // Pins taken out, kept per outfit so pinning it again brings back its look (0.7.2).
+    for (const [ck, row] of Object.entries(s.pinMemo)) {
+        if (!row || typeof row !== 'object') { delete s.pinMemo[ck]; continue; }
+        for (const [ek, map] of Object.entries(row)) {
+            if (map && typeof map === 'object' && cleaned.has(map)) continue;
+            const clean = {};
+            for (const [oid, m] of Object.entries(map && typeof map === 'object' ? map : {})) {
+                const p = cleanPin({ ...(m && typeof m === 'object' ? m : {}), outfit: oid });
+                if (p) clean[oid] = p;
+            }
+            if (Object.keys(clean).length) { row[ek] = clean; cleaned.add(clean); } else delete row[ek];
+        }
+        if (!Object.keys(row).length) delete s.pinMemo[ck];
     }
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
@@ -223,16 +238,36 @@ export function addPin(chatKey, entityKey, outfitId) {
     const row = s.pins[chatKey] || (s.pins[chatKey] = {});
     const list = row[entityKey] || (row[entityKey] = []);
     if (list.length >= MAX_PINS) return null;
-    const pin = cleanPin({ outfit: outfitId });
+    // Taken out of this chat before? Come back as it was (but never tucked away).
+    const memo = s.pinMemo[chatKey]?.[entityKey]?.[outfitId];
+    const pin = cleanPin(memo ? { ...memo, id: '', outfit: outfitId, hidden: false } : { outfit: outfitId });
     list.push(pin);
+    if (memo) dropMemo(s, chatKey, entityKey, outfitId);
     save();
     return pin;
 }
 
-export function removePin(chatKey, entityKey, pinId) {
+// Takes s instead of calling settings(): migrate() there would tidy away a pin list being filled right now.
+function dropMemo(s, chatKey, entityKey, outfitId) {
+    const row = s.pinMemo[chatKey];
+    if (!row?.[entityKey]) return;
+    delete row[entityKey][outfitId];
+    if (!Object.keys(row[entityKey]).length) delete row[entityKey];
+    if (!Object.keys(row).length) delete s.pinMemo[chatKey];
+}
+
+/** @param {boolean} remember keep its look, so pinning the same outfit here again brings it back (0.7.2) */
+export function removePin(chatKey, entityKey, pinId, remember = false) {
     const s = settings();
     const row = s.pins[chatKey];
     if (!row?.[entityKey]) return;
+    const pin = row[entityKey].find(p => p.id === pinId);
+    if (remember && pin) {
+        const mrow = s.pinMemo[chatKey] || (s.pinMemo[chatKey] = {});
+        const map = mrow[entityKey] || (mrow[entityKey] = {});
+        const { id, ...look } = structuredClone(pin);
+        map[pin.outfit] = { ...look, hidden: false };
+    }
     row[entityKey] = row[entityKey].filter(p => p.id !== pinId);
     if (!row[entityKey].length) delete row[entityKey];
     if (!Object.keys(row).length) delete s.pins[chatKey];
@@ -419,7 +454,7 @@ export function deleteDrawer(entityKey, drawerId) {
 }
 
 // Tables keyed by chat, each row keyed by entity.
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins', 'pinMemo'];
 // What a "whole character" change resets (the "random each reply" switch stays on).
 const PICK_TABLES = ['chats', 'timelines', 'tells'];
 
@@ -643,6 +678,7 @@ export function forgetOutfit(entityKey, outfitId) {
         if (!Object.keys(row).length) delete s.pins[ck];
     }
     for (const l of e.layouts || []) l.pins = l.pins.filter(p => p.outfit !== outfitId);
+    for (const ck of Object.keys(s.pinMemo)) dropMemo(s, ck, entityKey, outfitId);
     e.outfits = e.outfits.filter(x => x.id !== outfitId);
     if (e.global === outfitId) e.global = null;
     for (const [k, row] of Object.entries(s.chats)) {

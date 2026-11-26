@@ -876,6 +876,12 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-stage-ico { padding: 0; width: 36px; }
 .facets-stage-deg { flex: 0 0 auto; min-width: 42px; text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .facets-stage-tools.is-locked { width: max-content; }
+/* 0.7.2: a small two-row bar — opacity, then [⟲][⟳] | lock, tuck aside, remove */
+.facets-stage-tools:not(.is-locked) { flex-direction: column; flex-wrap: nowrap; align-items: stretch; width: max-content; gap: 5px; padding: 5px; }
+.facets-stage-tools:not(.is-locked) .facets-stage-op { flex: 0 0 auto; }
+.facets-stage-row2 { display: flex; align-items: center; gap: 5px; }
+.facets-stage-row2 .facets-stage-ico { width: 32px; min-width: 32px; height: 32px; }
+.facets-stage-sep { width: 1px; height: 22px; background: var(--facets-border); flex: 0 0 auto; }
 .facets-stage-rot, .facets-stage-size {
     position: absolute;
     width: 34px;

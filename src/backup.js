@@ -5,7 +5,7 @@ import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx } from './store.
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
 const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide'];
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo'];
 
 export async function exportBackup(toast) {
     const s = settings();

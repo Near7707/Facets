@@ -455,6 +455,8 @@ function closeTools() {
 }
 
 const deg = (r) => `${Math.round(normRot(r))}°`;
+// 0.7.2: the tool bar's second row is icon buttons only (the name shows on mouse over).
+const ico = (act, icon, label) => `<button type="button" class="facets-stage-btn facets-stage-ico" data-stage-act="${act}" title="${esc(label)}" aria-label="${esc(label)}"><i class="fa-solid ${icon}"></i></button>`;
 
 function openTools(key) {
     const st = stOf(key);
@@ -468,18 +470,14 @@ function openTools(key) {
     const rot = placeNow(key).rot || 0;
     bar.innerHTML = st.locked
         ? `<button type="button" class="facets-stage-btn" data-stage-act="unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button>
-           <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-eye-slash"></i><span>${esc(t('stage_hide'))}</span></button>`
+           <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-arrow-right-to-bracket"></i><span>${esc(t('stage_hide'))}</span></button>`
         : `<label class="facets-stage-op" title="${esc(t('stage_opacity'))}"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
              <input type="range" min="${Math.round(OPACITY_MIN * 100)}" max="100" step="1" value="${Math.round(st.opacity * 100)}" data-stage-act="opacity" aria-label="${esc(t('stage_opacity'))}"></label>
-           <div class="facets-stage-op facets-stage-rotrow">
-             <button type="button" class="facets-stage-btn facets-stage-ico" data-stage-act="rot-left" title="${esc(t('stage_rot_left'))}" aria-label="${esc(t('stage_rot_left'))}"><i class="fa-solid fa-rotate-left"></i></button>
-             <input type="range" min="-180" max="180" step="1" value="${Math.round(rot)}" data-stage-act="rot" aria-label="${esc(t('stage_rot'))}">
-             <span class="facets-stage-deg">${esc(deg(rot))}</span>
-             <button type="button" class="facets-stage-btn facets-stage-ico" data-stage-act="rot-right" title="${esc(t('stage_rot_right'))}" aria-label="${esc(t('stage_rot_right'))}"><i class="fa-solid fa-rotate-right"></i></button>
-           </div>
-           <button type="button" class="facets-stage-btn" data-stage-act="lock"><i class="fa-solid fa-lock"></i><span>${esc(t('stage_lock'))}</span></button>
-           <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-eye-slash"></i><span>${esc(t('stage_hide'))}</span></button>
-           <button type="button" class="facets-stage-btn" data-stage-act="remove" title="${esc(t(splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main'))}"><i class="fa-solid fa-xmark"></i><span>${esc(t('stage_remove'))}</span></button>`;
+           <div class="facets-stage-row2">
+             ${ico('rot-left', 'fa-rotate-left', t('stage_rot_left'))}${ico('rot-right', 'fa-rotate-right', t('stage_rot_right'))}
+             <span class="facets-stage-sep" aria-hidden="true"></span>
+             ${ico('lock', 'fa-lock', t('stage_lock'))}${ico('hide', 'fa-arrow-right-to-bracket', t('stage_hide'))}${ico('remove', 'fa-xmark', `${t('stage_remove')} · ${t(splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main')}`)}
+           </div>`;
     layer.appendChild(bar);
     if (!st.locked) {
         rotHandle = document.createElement('button');
@@ -741,7 +739,7 @@ function onClick(e) {
         case 'remove': {
             const { ek, pinId } = splitPid(key);
             closeTools();
-            if (pinId) removePin(currentScene().chatKey, ek, pinId);
+            if (pinId) removePin(currentScene().chatKey, ek, pinId, true);
             else { st.on = false; save(); }
             applyStage();
             document.dispatchEvent(new CustomEvent('facets:stage'));

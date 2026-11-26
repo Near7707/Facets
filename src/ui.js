@@ -431,7 +431,7 @@ function viewStage() {
           </div>
         </div>
         <div class="facets-section">
-          ${sw('stage-sticker', st.sticker, t('stage_sticker'), t('stage_sticker_note'))}
+          ${sw('stage-sticker', st.sticker, t('stage_sticker_main'), t('stage_sticker_note'))}
           ${sw('stage-flip', st.flip, t('stage_flip'))}
         </div>
         <div class="facets-row"><button type="button" class="facets-btn facets-wide" data-act="stage-reset">${esc(t('stage_reset'))}</button></div>
@@ -1488,7 +1488,7 @@ function onClick(e) {
             const key = activeKey();
             if (key && chatAvailable()) {
                 const chatKey = currentScene().chatKey;
-                if (act === 'pin-remove') removePin(chatKey, key, el.dataset.pin);
+                if (act === 'pin-remove') removePin(chatKey, key, el.dataset.pin, true);
                 else {
                     const pin = pinsOf(chatKey, key).find(p => p.id === el.dataset.pin);
                     if (pin) { if (act === 'pin-sticker') pin.sticker = !pin.sticker; else pin.flip = !pin.flip; save(); }
