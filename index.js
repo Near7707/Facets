@@ -12,9 +12,10 @@ import {
     initPersonaSource, setPersonaHint, applyAllSoon, updatePrompt, fixZoom,
     startObservers, currentScene, checkBranch, setPendingGeneration,
 } from './src/apply.js';
-import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender } from './src/ui.js';
+import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender, notifyAuto } from './src/ui.js';
+import { onReply } from './src/auto.js';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 setVersion(VERSION);
 
 function langOptions() {
@@ -115,6 +116,17 @@ function registerEvents() {
     for (const name of [ev.CHARACTER_MESSAGE_RENDERED, ev.MESSAGE_SWIPED, ev.MESSAGE_DELETED]) {
         on(name, () => refreshIfOpen());
     }
+    // A finished AI reply: keywords and "random each reply" (from that reply on).
+    on(ev.MESSAGE_RECEIVED, (mesId, type) => {
+        try {
+            const changes = onReply(mesId, type);
+            if (changes.length) {
+                applyAllSoon();
+                refreshIfOpen();
+                notifyAuto(changes);
+            }
+        } catch (e) { console.error('[Facets]', e); }
+    });
     on(ev.PERSONA_CHANGED, (avatar) => {
         setPersonaHint(avatar);
         applyAllSoon();

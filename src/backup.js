@@ -4,8 +4,8 @@ import { t } from './i18n.js';
 import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
-const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages'];
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone'];
+const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms'];
 
 export async function exportBackup(toast) {
     const s = settings();
@@ -19,6 +19,7 @@ export async function exportBackup(toast) {
         timelines: structuredClone(s.timelines),
         tells: structuredClone(s.tells),
         branchDone: structuredClone(s.branchDone),
+        randoms: structuredClone(s.randoms),
         images: null,
     };
     if (s.backupImages) {
@@ -90,7 +91,7 @@ export async function importBackup(file, toast) {
     for (const k of CHAT_TABLES) s[k] = tables[k];
     for (const k of PREF_KEYS) {
         const v = data.prefs?.[k];
-        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number')) s[k] = v;
+        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (k === 'ignoreWords' && typeof v === 'string')) s[k] = v;
     }
     s.files = files;
     migrate(s);

@@ -4,6 +4,13 @@ export const MODULE = 'facets';
 export const FORMAT = 1;
 export const DEFAULT_MARK = '__default__';
 
+// Words that, right next to a keyword, mean the outfit is NOT being put on.
+// Korean words are checked right after the keyword, English words a few words before or right after.
+export const DEFAULT_IGNORE = '벗, 대신, 말고, 없이, 빼고, 아닌, take off, took off, taking off, takes off, taken off, off, '
+    + 'out of, without, remove, removed, removing, strip, stripped, not, no';
+// Changes kept per chat and person; older ones fold into "before the first change".
+export const MAX_POINTS = 200;
+
 const DEFAULTS = Object.freeze({
     format: FORMAT,
     lang: 'en',
@@ -14,6 +21,9 @@ const DEFAULTS = Object.freeze({
     tellCount: 3, // after a change, describe the look for this many AI replies (0 = every time)
     sinceMode: false, // "From now on": a change keeps older messages in the older outfit
     backupImages: true,
+    autoKeywords: true, // change outfits when an AI reply uses their words
+    autoPair: false, // automatic changes also change the matching-set partner
+    ignoreWords: DEFAULT_IGNORE,
     // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null }
     // key is "char:<avatar file>" or "persona:<avatar file>"
     entities: {},
@@ -26,6 +36,8 @@ const DEFAULTS = Object.freeze({
     tells: {},
     // Branch chats already set up from their parent chat: chatKey -> parent chatKey
     branchDone: {},
+    // "Random each reply": chatKey -> { entityKey: drawerId ('' = all outfits) }
+    randoms: {},
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -58,10 +70,11 @@ export function migrate(s) {
     if (typeof s.format !== 'number') s.format = FORMAT;
     // Future format upgrades go here: if (s.format < 2) { ...; s.format = 2; }
     if (!Array.isArray(s.files)) s.files = [];
-    for (const k of ['chats', 'timelines', 'tells', 'branchDone']) {
+    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms']) {
         if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
     }
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
+    if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
     for (const row of Object.values(s.timelines)) {
         for (const [ek, tl] of Object.entries(row || {})) {
             if (!tl || !Array.isArray(tl.points)) { delete row[ek]; continue; }
@@ -74,12 +87,16 @@ export function migrate(s) {
         if (e.global === undefined) e.global = null;
         if (!Array.isArray(e.drawers)) e.drawers = [];
         e.drawers = e.drawers.filter(d => d && typeof d.id === 'string');
-        for (const d of e.drawers) if (typeof d.name !== 'string') d.name = '';
+        for (const d of e.drawers) {
+            if (typeof d.name !== 'string') d.name = '';
+            if (typeof d.kw !== 'string') d.kw = '';
+        }
         const drawerIds = new Set(e.drawers.map(d => d.id));
         for (const o of e.outfits) {
             if (o.pair === undefined) o.pair = null;
             if (typeof o.desc !== 'string') o.desc = '';
             if (typeof o.name !== 'string') o.name = '';
+            if (typeof o.kw !== 'string') o.kw = '';
             if (!Array.isArray(o.drawers)) o.drawers = [];
             o.drawers = [...new Set(o.drawers.filter(id => drawerIds.has(id)))];
         }
@@ -179,7 +196,7 @@ export function chatOnlyOutfit(entityKey, chatKey) {
 
 export function addDrawer(entityKey, name) {
     const e = getEntity(entityKey, true);
-    const d = { id: newId(), name: String(name || '').trim().slice(0, 40) };
+    const d = { id: newId(), name: String(name || '').trim().slice(0, 40), kw: '' };
     e.drawers.push(d);
     return d;
 }
@@ -189,16 +206,36 @@ export function renameDrawer(entityKey, drawerId, name) {
     if (d) d.name = String(name || '').trim().slice(0, 40);
 }
 
+export function setDrawerKeywords(entityKey, drawerId, kw) {
+    const d = getEntity(entityKey)?.drawers.find(x => x.id === drawerId);
+    if (d) d.kw = cleanKeywords(kw);
+}
+
+/** "suit,  tie ,," → "suit, tie" */
+export function cleanKeywords(kw) {
+    return splitWords(kw).join(', ').slice(0, 300);
+}
+
+export function splitWords(text) {
+    return [...new Set(String(text || '').split(/[,，、\n]/).map(w => w.trim()).filter(Boolean))];
+}
+
 /** Removes the drawer only. The outfits inside stay in the wardrobe. */
 export function deleteDrawer(entityKey, drawerId) {
     const e = getEntity(entityKey);
     if (!e) return;
     e.drawers = e.drawers.filter(d => d.id !== drawerId);
     for (const o of e.outfits) o.drawers = o.drawers.filter(id => id !== drawerId);
+    // "Random each reply" from this drawer falls back to all outfits.
+    for (const row of Object.values(settings().randoms)) {
+        if (row[entityKey] === drawerId) row[entityKey] = '';
+    }
 }
 
 // Tables keyed by chat, each row keyed by entity.
-const CHAT_TABLES = ['chats', 'timelines', 'tells'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms'];
+// What a "whole character" change resets (the "random each reply" switch stays on).
+const PICK_TABLES = ['chats', 'timelines', 'tells'];
 
 function rowOf(table, chatKey, create = false) {
     const s = settings();
@@ -276,6 +313,7 @@ function setOne(entityKey, outfitId, scope, chatKey, since, now) {
             const last = tl.points[tl.points.length - 1];
             const shownNow = last ? last.id : (prev ?? null);
             if (shownNow !== mark) tl.points.push({ t: now, id: mark });
+            capPoints(tl);
             if (!tl.points.length) dropCell('timelines', chatKey, entityKey);
         } else {
             // Changing the whole chat replaces its history.
@@ -289,10 +327,74 @@ function setOne(entityKey, outfitId, scope, chatKey, since, now) {
     } else {
         e.global = outfitId || null;
         // "Whole character" applies to every chat: drop per-chat picks, histories and tells for this entity.
-        for (const table of CHAT_TABLES) {
+        for (const table of PICK_TABLES) {
             for (const k of Object.keys(s[table])) dropCell(table, k, entityKey);
         }
     }
+}
+
+/** Old changes fold into the starting outfit so a long chat doesn't grow forever. */
+function capPoints(tl) {
+    while (tl.points.length > MAX_POINTS) tl.base = tl.points.shift().id;
+}
+
+/** After the history changed: the chat's "now" outfit is the last change (or the starting one). */
+function syncNow(chatKey, entityKey) {
+    const tl = settings().timelines[chatKey]?.[entityKey];
+    const row = rowOf('chats', chatKey, true);
+    if (tl?.points.length) {
+        row[entityKey] = tl.points[tl.points.length - 1].id;
+    } else {
+        if (!tl || tl.base === null) dropCell('chats', chatKey, entityKey);
+        else row[entityKey] = tl.base;
+        dropCell('timelines', chatKey, entityKey);
+    }
+    if (!descNow(entityKey, chatKey)) dropCell('tells', chatKey, entityKey);
+}
+
+/**
+ * An automatic change (keyword 'kw' or random 'rnd') from one AI reply on. Always "from now on",
+ * never told to the AI and never follows the matching set (the caller decides that).
+ * @param {{ t: number, mi?: number, src: 'kw'|'rnd' }} info t = when the reply was sent, mi = its message number
+ */
+export function autoChange(chatKey, entityKey, outfitId, info) {
+    if (!chatKey || !entityKey) return;
+    getEntity(entityKey, true);
+    const mark = outfitId || DEFAULT_MARK;
+    const row = rowOf('chats', chatKey, true);
+    const tlRow = rowOf('timelines', chatKey, true);
+    const tl = tlRow[entityKey] || (tlRow[entityKey] = { base: row[entityKey] ?? null, points: [] });
+    const p = { t: info.t, id: mark, src: info.src };
+    if (Number.isInteger(info.mi)) p.mi = info.mi;
+    tl.points.push(p);
+    tl.points.sort((a, b) => a.t - b.t);
+    capPoints(tl);
+    row[entityKey] = tl.points[tl.points.length - 1].id;
+    // Automatic changes change the picture only.
+    dropCell('tells', chatKey, entityKey);
+}
+
+/** Remove the automatic changes made by one reply (before a swipe picks again). */
+export function dropAutoAt(chatKey, entityKey, mi, src = null) {
+    const tl = timelineOf(chatKey, entityKey);
+    if (!tl) return false;
+    const before = tl.points.length;
+    tl.points = tl.points.filter(p => !(p.src && p.mi === mi && (!src || p.src === src)));
+    if (tl.points.length === before) return false;
+    syncNow(chatKey, entityKey);
+    return true;
+}
+
+/** "Random each reply" for one chat: drawer id ('' = all), or undefined when off. */
+export function randomOf(chatKey, entityKey) {
+    return chatKey ? settings().randoms[chatKey]?.[entityKey] : undefined;
+}
+
+export function setRandom(chatKey, entityKey, drawerId) {
+    if (!chatKey || !entityKey) return;
+    if (drawerId === null || drawerId === undefined) dropCell('randoms', chatKey, entityKey);
+    else rowOf('randoms', chatKey, true)[entityKey] = drawerId;
+    save();
 }
 
 /** Remove one change from a chat's history. */
@@ -300,15 +402,7 @@ export function deletePoint(chatKey, entityKey, t) {
     const tl = timelineOf(chatKey, entityKey);
     if (!tl) return;
     tl.points = tl.points.filter(p => p.t !== t);
-    const row = rowOf('chats', chatKey, true);
-    if (tl.points.length) {
-        row[entityKey] = tl.points[tl.points.length - 1].id;
-    } else {
-        if (tl.base === null) dropCell('chats', chatKey, entityKey);
-        else row[entityKey] = tl.base;
-        dropCell('timelines', chatKey, entityKey);
-    }
-    if (!descNow(entityKey, chatKey)) dropCell('tells', chatKey, entityKey);
+    syncNow(chatKey, entityKey);
     save();
 }
 

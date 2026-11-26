@@ -7,7 +7,7 @@
         CHARACTER_MESSAGE_RENDERED: 'character_message_rendered', USER_MESSAGE_RENDERED: 'user_message_rendered',
         MORE_MESSAGES_LOADED: 'more_messages_loaded', MESSAGE_UPDATED: 'message_updated', MESSAGE_SWIPED: 'message_swiped',
         MESSAGE_EDITED: 'message_edited', CHARACTER_PAGE_LOADED: 'character_page_loaded', PERSONA_CHANGED: 'persona_changed',
-        GENERATION_STARTED: 'generation_started', CHARACTER_RENAMED: 'character_renamed', CHARACTER_DELETED: 'characterDeleted',
+        GENERATION_STARTED: 'generation_started', MESSAGE_RECEIVED: 'message_received', CHARACTER_RENAMED: 'character_renamed', CHARACTER_DELETED: 'characterDeleted',
         PERSONA_DELETED: 'persona_deleted', CHAT_RENAMED: 'chat_renamed', CHAT_DELETED: 'chat_deleted',
     };
     const eventSource = {
@@ -69,11 +69,12 @@
         if (!ch) return;
         messagesOf(ch.chat).forEach((m, i) => addMessage(m.is_user, i, true));
     }
-    function addMessage(isUser, i, existing = false) {
+    function addMessage(isUser, i, existing = false, text = null) {
         const ch = characters[state.characterId];
         const chat = document.getElementById('chat');
         i = i ?? chat.children.length;
-        if (!existing) messagesOf(ch.chat)[i] = { is_user: isUser, is_system: false, mes: `Message ${i}`, send_date: new Date().toISOString() };
+        if (!existing) messagesOf(ch.chat)[i] = { is_user: isUser, is_system: false, mes: text ?? `Message ${i}`, send_date: new Date().toISOString() };
+        if (!existing && !isUser) eventSource.emit(eventTypes.MESSAGE_RECEIVED, i, 'normal');
         const div = document.createElement('div');
         div.className = 'mes';
         div.setAttribute('mesid', String(i ?? chat.children.length));
@@ -103,6 +104,15 @@
             metas[c.chat] = { main_chat: from };
             renderChat();
             await eventSource.emit(eventTypes.CHAT_CHANGED, c.chat);
+        },
+        /** An AI reply with this text (fires message_received like a real reply). */
+        reply(text) { addMessage(false, document.getElementById('chat').children.length, false, text); },
+        /** Like a swipe: the last AI reply gets new text and a new send time. */
+        async swipe(text) {
+            const c = characters[state.characterId]; const list = messagesOf(c.chat); const i = list.length - 1;
+            list[i] = { ...list[i], mes: text, send_date: new Date().toISOString() };
+            await eventSource.emit(eventTypes.MESSAGE_RECEIVED, i, 'swipe');
+            await eventSource.emit(eventTypes.MESSAGE_SWIPED, i);
         },
         async openChat(name) { characters[state.characterId].chat = name; renderChat(); await eventSource.emit(eventTypes.CHAT_CHANGED, name); },
     };

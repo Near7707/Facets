@@ -5,7 +5,9 @@ import {
     ctx, settings, save, chooseLang, getEntity, findOutfit, choose, chatChoice, effectiveOutfit,
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
     addDrawer, renameDrawer, deleteDrawer, timelineOf, deletePoint, tellAgain, muteTell,
+    setDrawerKeywords, cleanKeywords, randomOf, setRandom, DEFAULT_IGNORE,
 } from './store.js';
+import { rollDice } from './auto.js';
 import {
     urlOf, folderFor, readAsDataURL, loadImage, uploadDataURL, deletePath, autoCrop, renderCrop,
     avatarAspect, avatarStyle, coverScale,
@@ -31,7 +33,10 @@ const state = {
     crop: null,
     busy: false,
     pairTarget: '',
+    histMore: false,
 };
+
+const HISTORY_PAGE = 50;
 
 let root = null;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -125,6 +130,29 @@ function outfitLabel(o, i) {
     return o?.name?.trim() || t('outfit_n', { n: i + 1 });
 }
 
+// ---------- automatic changes ----------
+
+/** After a keyword change: a short notice; tapping it undoes the change. Random picks stay quiet. */
+export function notifyAuto(changes) {
+    const kw = changes.filter(c => c.src === 'kw');
+    if (!kw.length) return;
+    const chatKey = currentScene().chatKey;
+    const names = kw.map(c => {
+        const e = getEntity(c.key);
+        const o = findOutfit(c.key, c.id);
+        return `${displayName(c.key)}: ${o ? outfitLabel(o, e.outfits.indexOf(o)) : t('default_look')}`;
+    }).join(', ');
+    const undo = () => {
+        for (const c of kw) deletePoint(chatKey, c.key, c.t);
+        applyAllSoon();
+        refreshIfOpen();
+        toast('info', t('kw_undone'));
+    };
+    try {
+        globalThis.toastr?.info?.(t('kw_toast', { names }), t('ext_name'), { onclick: undo, timeOut: 8000, extendedTimeOut: 4000 });
+    } catch { /* ignore */ }
+}
+
 // ---------- open / close ----------
 
 export function openWardrobe({ fromSettings = false } = {}) {
@@ -196,7 +224,7 @@ function back() {
             state.screen = state.crop?.mode === 'add' ? 'organize' : 'edit'; state.crop = null; break;
         case 'pair': state.screen = 'edit'; break;
         case 'drawers': state.screen = 'organize'; break;
-        case 'history': state.screen = 'wardrobe'; break;
+        case 'history': state.screen = 'wardrobe'; state.histMore = false; break;
         case 'settings': case 'organize': state.screen = 'wardrobe'; break;
         default: closeWardrobe(); return;
     }
@@ -304,8 +332,11 @@ function viewWardrobe() {
         .concat(visible.map(([o, i]) => tileHtml({ key, outfit: o, index: i, selected: shown?.id === o.id, mode: 'wear' })));
     const historyBtn = chatKey && timelineOf(chatKey, key)
         ? `<button type="button" class="facets-btn facets-small" data-act="history" title="${esc(t('history'))}"><i class="fa-solid fa-clock-rotate-left"></i><span>${esc(t('history_short'))}</span></button>` : '';
-    let body = `<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}</div>
+    const diceBtn = chatKey && e.outfits.length
+        ? `<button type="button" class="facets-btn facets-small" data-act="dice" title="${esc(t('dice'))}" aria-label="${esc(t('dice'))}"><i class="fa-solid fa-dice"></i></button>` : '';
+    let body = `<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
         <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
+        ${chatKey && e.outfits.length ? randomRow(e, key, chatKey) : ''}
         ${drawerChips(e, drawer)}
         <div class="facets-grid">${tiles.join('')}</div>`;
     if (e.outfits.length && drawer && !visible.length) {
@@ -332,6 +363,19 @@ function viewWardrobe() {
         <button type="button" class="facets-btn facets-primary" data-act="organize" title="${esc(t('organize'))}">${esc(t('organize'))}</button>
       </div>`;
     return [head, body, foot];
+}
+
+/** "Random each reply" switch for this chat. The range is the drawer tab open when it was turned on. */
+function randomRow(e, key, chatKey) {
+    const range = randomOf(chatKey, key);
+    const on = range !== undefined;
+    const i = on && range ? e.drawers.findIndex(d => d.id === range) : -1;
+    const note = !on ? t('rnd_note_off') : i >= 0 ? t('rnd_note_drawer', { name: drawerLabel(e.drawers[i], i) }) : t('rnd_note_all');
+    return `<div class="facets-aibar facets-rndbar"><label class="facets-toggle">
+        <span class="facets-toggle-text"><span>${esc(t('rnd_label'))}</span><small>${esc(note)}</small></span>
+        <input type="checkbox" data-act="random"${on ? ' checked' : ''}>
+        <span class="facets-switch" aria-hidden="true"></span>
+      </label></div>`;
 }
 
 /** One line under "Tell the AI": is the look being sent right now, and why not. */
@@ -364,16 +408,21 @@ function viewHistory() {
         const o = mark === null ? findOutfit(key, e.global) : (mark === DEFAULT_MARK ? null : findOutfit(key, mark));
         return `<div class="facets-hist-thumb"><img src="${esc(o ? urlOf(o.sq || o.orig) : defaultThumb(key))}" alt="" draggable="false"></div>`;
     };
-    const rows = [...tl.points].reverse().map(p => `<div class="facets-hist-row">
+    const all = [...tl.points].reverse();
+    const list = state.histMore ? all : all.slice(0, HISTORY_PAGE);
+    const icon = (p) => p.src === 'kw' ? '🔑 ' : p.src === 'rnd' ? '🎲 ' : '';
+    const more = list.length < all.length
+        ? `<button type="button" class="facets-btn facets-wide" data-act="history-more">${esc(t('history_more', { n: all.length - list.length }))}</button>` : '';
+    const rows = list.map(p => `<div class="facets-hist-row">
         ${thumb(p.id)}
-        <div class="facets-hist-text"><div class="facets-hist-name">${esc(markLabel(key, p.id))}</div><div class="facets-hist-time">${esc(t('history_from', { time: timeLabel(p.t) }))}</div></div>
+        <div class="facets-hist-text"><div class="facets-hist-name">${esc(icon(p) + markLabel(key, p.id))}</div><div class="facets-hist-time">${esc(t('history_from', { time: timeLabel(p.t) }))}</div></div>
         <button type="button" class="facets-iconbtn facets-danger-icon" data-act="history-delete" data-t="${p.t}" title="${esc(t('history_delete'))}" aria-label="${esc(t('history_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
       </div>`).join('');
     const base = `<div class="facets-hist-row is-base">
         ${thumb(tl.base)}
         <div class="facets-hist-text"><div class="facets-hist-name">${esc(markLabel(key, tl.base))}</div><div class="facets-hist-time">${esc(t('history_base'))}</div></div>
       </div>`;
-    const body = `<div class="facets-stack">${rows}${base}<div class="facets-note">${esc(t('history_note'))}</div></div>`;
+    const body = `<div class="facets-stack">${rows}${more}${state.histMore || !more ? base : ''}<div class="facets-note">${esc(t('history_note'))}</div></div>`;
     const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
     return [head, body, foot];
 }
@@ -445,6 +494,10 @@ function viewDrawers() {
             <input type="text" class="facets-input" data-drawer-name="${esc(d.id)}" maxlength="40" value="${esc(d.name)}" placeholder="${esc(drawerLabel(d, i))}" aria-label="${esc(t('drawer_name'))}" autocomplete="off">
             <span class="facets-drawer-count" title="${esc(t('drawer_count', { n }))}">${esc(t('drawer_count', { n }))}</span>
             <button type="button" class="facets-iconbtn facets-danger-icon" data-act="drawer-delete" data-id="${esc(d.id)}" title="${esc(t('drawer_delete'))}" aria-label="${esc(t('drawer_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
+          </div>
+          <div class="facets-drawer-kw">
+            <span class="facets-drawer-kw-icon" title="${esc(t('kw_label'))}" aria-hidden="true">🔑</span>
+            <input type="text" class="facets-input" data-drawer-kw="${esc(d.id)}" maxlength="300" value="${esc(d.kw || '')}" placeholder="${esc(t('drawer_kw_ph'))}" aria-label="${esc(t('kw_label'))}" autocomplete="off">
           </div>`;
     }).join('');
     const body = `<div class="facets-stack">
@@ -463,7 +516,7 @@ function viewEdit() {
     const key = activeKey();
     const o = findOutfit(key, state.editId);
     if (!o) { state.screen = 'organize'; return viewOrganize(); }
-    if (!state.draft) state.draft = { name: o.name, desc: o.desc, drawers: [...o.drawers] };
+    if (!state.draft) state.draft = { name: o.name, desc: o.desc, kw: o.kw || '', drawers: [...o.drawers] };
     const e = getEntity(key);
     const head = headTitle(t('edit_outfit'));
     const pair = o.pair && findOutfit(o.pair.key, o.pair.id);
@@ -485,6 +538,10 @@ function viewEdit() {
         <label class="facets-field">
           <span class="facets-flabel">${esc(t('desc_label'))} <small>${esc(t('desc_note'))}</small></span>
           <textarea class="facets-input facets-textarea" data-field="desc" rows="3" maxlength="1000" placeholder="${esc(t('desc_ph'))}">${esc(state.draft.desc)}</textarea>
+        </label>
+        <label class="facets-field">
+          <span class="facets-flabel">${esc(t('kw_label'))} <small>${esc(t('kw_note'))}</small></span>
+          <input type="text" class="facets-input" data-field="kw" maxlength="300" value="${esc(state.draft.kw)}" placeholder="${esc(t('kw_ph'))}" autocomplete="off">
         </label>
         <div class="facets-field">
           <span class="facets-flabel">${esc(t('drawers'))} <small>${esc(t('drawer_multi_note'))}</small></span>
@@ -572,6 +629,16 @@ function viewSettings() {
               ${[1, 3, 5, 0].map(n => `<option value="${n}"${settings().tellCount === n ? ' selected' : ''}>${esc(n ? t('tell_count_n', { n }) : t('tell_count_always'))}</option>`).join('')}
             </select>
           </label>
+        </div>
+        <div class="facets-section">
+          <div class="facets-stitle">${esc(t('auto_title'))}</div>
+          ${toggleRow('autoKeywords', t('auto_kw'), t('auto_kw_note'))}
+          <label class="facets-field">
+            <span class="facets-flabel">${esc(t('ignore_label'))} <small>${esc(t('ignore_note'))}</small></span>
+            <textarea class="facets-input facets-textarea" data-setting-text="ignoreWords" rows="2" maxlength="1000">${esc(settings().ignoreWords)}</textarea>
+          </label>
+          <button type="button" class="facets-btn facets-small" data-act="ignore-reset">${esc(t('ignore_reset'))}</button>
+          ${toggleRow('autoPair', t('auto_pair'), t('auto_pair_note'))}
         </div>
         <div class="facets-section">
           <label class="facets-field">
@@ -1060,7 +1127,17 @@ function onClick(e) {
         case 'back': back(); break;
         case 'tab': state.tab = el.dataset.tab; state.drawer = ''; state.screen = 'wardrobe'; render(); break;
         case 'drawer': state.drawer = el.dataset.drawer || ''; render(); break;
-        case 'history': state.screen = 'history'; render(); break;
+        case 'history': state.screen = 'history'; state.histMore = false; render(); break;
+        case 'history-more': state.histMore = true; render(); break;
+        case 'dice': {
+            const key = activeKey();
+            const e = key && getEntity(key);
+            if (!e) break;
+            const o = rollDice(key, currentDrawer(e));
+            if (!o) toast('info', t('dice_none'));
+            applyAllSoon(); render(); break;
+        }
+        case 'ignore-reset': settings().ignoreWords = DEFAULT_IGNORE; save(); render(); break;
         case 'history-delete': removePoint(Number(el.dataset.t)); break;
         case 'ai-mute': muteTell(currentScene().chatKey, activeKey()); applyAllSoon(); render(); break;
         case 'ai-again': tellAgain(currentScene().chatKey, activeKey()); applyAllSoon(); render(); break;
@@ -1101,6 +1178,7 @@ function onClick(e) {
             if (o && state.draft) {
                 o.name = state.draft.name.trim();
                 o.desc = state.draft.desc.trim();
+                o.kw = cleanKeywords(state.draft.kw);
                 const ids = new Set((getEntity(activeKey())?.drawers || []).map(d => d.id));
                 o.drawers = (state.draft.drawers || []).filter(id => ids.has(id));
                 save();
@@ -1162,6 +1240,24 @@ async function runCleanup() {
 function onChange(e) {
     const el = e.target;
     const act = el.dataset.act;
+    if (el.dataset.drawerKw) {
+        setDrawerKeywords(activeKey(), el.dataset.drawerKw, el.value);
+        save();
+        return;
+    }
+    if (el.dataset.settingText) {
+        settings()[el.dataset.settingText] = String(el.value || '').slice(0, 1000);
+        save();
+        return;
+    }
+    if (act === 'random') {
+        const key = activeKey();
+        const e = key && getEntity(key);
+        const chatKey = currentScene().chatKey;
+        if (e && chatKey) setRandom(chatKey, key, el.checked ? currentDrawer(e) : null);
+        render();
+        return;
+    }
     if (el.dataset.drawerName) {
         renameDrawer(activeKey(), el.dataset.drawerName, el.value);
         save();
@@ -1213,7 +1309,7 @@ document.addEventListener('keydown', (e) => {
     if (!state.open || (e.key !== 'Enter' && e.key !== ' ')) return;
     const el = e.target;
     if (e.key === 'Enter' && el?.classList?.contains('facets-drawer-new')) { e.preventDefault(); addDrawerFromInput(); return; }
-    if (e.key === 'Enter' && el?.dataset?.drawerName) { e.preventDefault(); el.blur(); return; }
+    if (e.key === 'Enter' && (el?.dataset?.drawerName || el?.dataset?.drawerKw)) { e.preventDefault(); el.blur(); return; }
     if (!root?.contains(el) || el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return;
     if (el.getAttribute('role') === 'button') { e.preventDefault(); el.click(); }
 });
