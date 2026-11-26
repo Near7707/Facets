@@ -4,13 +4,13 @@ import { t, LANGUAGES, setLanguage, getLanguage } from './i18n.js';
 import {
     ctx, settings, save, chooseLang, getEntity, findOutfit, choose, chatChoice, effectiveOutfit,
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
-    addDrawer, renameDrawer, deleteDrawer,
+    addDrawer, renameDrawer, deleteDrawer, timelineOf, deletePoint, tellAgain, muteTell,
 } from './store.js';
 import {
     urlOf, folderFor, readAsDataURL, loadImage, uploadDataURL, deletePath, autoCrop, renderCrop,
     avatarAspect, avatarStyle, coverScale,
 } from './images.js';
-import { currentScene, personaName, applyAllSoon, currentPersonaAvatar } from './apply.js';
+import { currentScene, personaName, applyAllSoon, currentPersonaAvatar, tellStatus } from './apply.js';
 import { exportBackup, importBackup, cleanupAll } from './backup.js';
 import { syncTheme } from './theme.js';
 import { startViewport, stopViewport } from './viewport.js';
@@ -20,7 +20,7 @@ export function setVersion(v) { VERSION = v; }
 
 const state = {
     open: false,
-    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers
+    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers | history
     tab: 'char',
     drawer: '', // drawer tab shown in the wardrobe ('' = all)
     fromSettings: false,
@@ -102,6 +102,25 @@ function currentDrawer(e) {
     return state.drawer;
 }
 
+function timeLabel(ms) {
+    try {
+        const d = new Date(ms);
+        const today = d.toDateString() === new Date().toDateString();
+        return d.toLocaleString(getLanguage() === 'ko' ? 'ko-KR' : 'en-US', today
+            ? { hour: 'numeric', minute: '2-digit' }
+            : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch { return new Date(ms).toISOString(); }
+}
+
+/** Name of what a stored mark shows: outfit id, DEFAULT_MARK, or null (= same as all chats). */
+function markLabel(key, mark) {
+    const e = getEntity(key);
+    if (mark === null || mark === undefined) return t('status_follow');
+    if (mark === DEFAULT_MARK) return t('default_look');
+    const o = findOutfit(key, mark);
+    return o ? outfitLabel(o, e.outfits.indexOf(o)) : t('default_look');
+}
+
 function outfitLabel(o, i) {
     return o?.name?.trim() || t('outfit_n', { n: i + 1 });
 }
@@ -177,6 +196,7 @@ function back() {
             state.screen = state.crop?.mode === 'add' ? 'organize' : 'edit'; state.crop = null; break;
         case 'pair': state.screen = 'edit'; break;
         case 'drawers': state.screen = 'organize'; break;
+        case 'history': state.screen = 'wardrobe'; break;
         case 'settings': case 'organize': state.screen = 'wardrobe'; break;
         default: closeWardrobe(); return;
     }
@@ -198,6 +218,7 @@ function render() {
         case 'settings': [head, body, foot] = viewSettings(); break;
         case 'pair': [head, body, foot] = viewPair(); break;
         case 'drawers': [head, body, foot] = viewDrawers(); break;
+        case 'history': [head, body, foot] = viewHistory(); break;
     }
     const lang = getLanguage();
     root.innerHTML = `
@@ -271,7 +292,9 @@ function viewWardrobe() {
         const chatName = c === undefined ? t('status_follow')
             : c === DEFAULT_MARK ? t('default_look')
                 : (findOutfit(key, c) ? outfitLabel(findOutfit(key, c), idx(findOutfit(key, c))) : t('status_follow'));
-        status = `${t('status_chat', { a: chatName })} · ${t('status_all', { b: globalName })}`;
+        const tl = timelineOf(chatKey, key);
+        const since = tl ? ` ${t('status_since', { time: timeLabel(tl.points[tl.points.length - 1].t) })}` : '';
+        status = `${t('status_chat', { a: chatName })}${since} · ${t('status_all', { b: globalName })}`;
     } else {
         status = t('status_all', { b: globalName });
     }
@@ -279,8 +302,10 @@ function viewWardrobe() {
     const visible = e.outfits.map((o, i) => [o, i]).filter(([o]) => !drawer || o.drawers.includes(drawer));
     const tiles = [tileHtml({ key, outfit: null, selected: !shown, mode: 'wear' })]
         .concat(visible.map(([o, i]) => tileHtml({ key, outfit: o, index: i, selected: shown?.id === o.id, mode: 'wear' })));
-    let body = `<div class="facets-status" title="${esc(status)}">${esc(status)}</div>
-        <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}</div>
+    const historyBtn = chatKey && timelineOf(chatKey, key)
+        ? `<button type="button" class="facets-btn facets-small" data-act="history" title="${esc(t('history'))}"><i class="fa-solid fa-clock-rotate-left"></i><span>${esc(t('history_short'))}</span></button>` : '';
+    let body = `<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}</div>
+        <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
         ${drawerChips(e, drawer)}
         <div class="facets-grid">${tiles.join('')}</div>`;
     if (e.outfits.length && drawer && !visible.length) {
@@ -299,12 +324,57 @@ function viewWardrobe() {
             <button type="button" role="radio" class="facets-segbtn${state.scope === 'all' ? ' on' : ''}" data-act="scope" data-scope="all" aria-checked="${state.scope === 'all'}" title="${esc(allLabel)}">${esc(allLabel)}</button>
           </div>`
         : '';
-    const foot = `${seg}
+    const sinceRow = chatKey && state.scope === 'chat' ? `<div class="facets-since">${toggleRow('sinceMode', t('since_label'), t('since_note'))}</div>` : '';
+    const foot = `${seg}${sinceRow}
       <div class="facets-row">
         <button type="button" class="facets-btn" data-act="wear-default" title="${esc(t('default_look'))}">${esc(t('default_look'))}</button>
         ${addButton()}
         <button type="button" class="facets-btn facets-primary" data-act="organize" title="${esc(t('organize'))}">${esc(t('organize'))}</button>
       </div>`;
+    return [head, body, foot];
+}
+
+/** One line under "Tell the AI": is the look being sent right now, and why not. */
+function aiStateHtml(key, chatKey) {
+    if (!settings().tellAI || !chatKey) return '';
+    const st = tellStatus(key, chatKey);
+    const n = settings().tellCount;
+    const text = {
+        notchat: t('ai_notchat'), default: t('ai_default'), empty: t('ai_empty'),
+        always: t('ai_always'), sending: t('ai_sending', { n: st.left }), muted: t('ai_muted'),
+        done: t('ai_done', { n }), none: t('ai_none'),
+    }[st.kind];
+    if (!text) return '';
+    const on = st.kind === 'sending' || st.kind === 'always';
+    let btn = '';
+    if (st.kind === 'sending') btn = `<button type="button" class="facets-btn facets-small" data-act="ai-mute">${esc(t('ai_mute'))}</button>`;
+    else if (['muted', 'done', 'none'].includes(st.kind)) btn = `<button type="button" class="facets-btn facets-small" data-act="ai-again"><i class="fa-solid fa-rotate-right"></i><span>${esc(t('ai_again'))}</span></button>`;
+    return `<div class="facets-aistate${on ? ' is-on' : ''}"><span class="facets-aistate-dot" aria-hidden="true"></span><span class="facets-aistate-text">${esc(text)}</span>${btn}</div>`;
+}
+
+function viewHistory() {
+    const key = activeKey();
+    const sc = currentScene();
+    const chatKey = chatAvailable() ? sc.chatKey : null;
+    const head = headTitle(`${t('history')} · ${displayName(key)}`);
+    const tl = chatKey && key ? timelineOf(chatKey, key) : null;
+    if (!tl) { state.screen = 'wardrobe'; return viewWardrobe(); }
+    const e = getEntity(key);
+    const thumb = (mark) => {
+        const o = mark === null ? findOutfit(key, e.global) : (mark === DEFAULT_MARK ? null : findOutfit(key, mark));
+        return `<div class="facets-hist-thumb"><img src="${esc(o ? urlOf(o.sq || o.orig) : defaultThumb(key))}" alt="" draggable="false"></div>`;
+    };
+    const rows = [...tl.points].reverse().map(p => `<div class="facets-hist-row">
+        ${thumb(p.id)}
+        <div class="facets-hist-text"><div class="facets-hist-name">${esc(markLabel(key, p.id))}</div><div class="facets-hist-time">${esc(t('history_from', { time: timeLabel(p.t) }))}</div></div>
+        <button type="button" class="facets-iconbtn facets-danger-icon" data-act="history-delete" data-t="${p.t}" title="${esc(t('history_delete'))}" aria-label="${esc(t('history_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
+      </div>`).join('');
+    const base = `<div class="facets-hist-row is-base">
+        ${thumb(tl.base)}
+        <div class="facets-hist-text"><div class="facets-hist-name">${esc(markLabel(key, tl.base))}</div><div class="facets-hist-time">${esc(t('history_base'))}</div></div>
+      </div>`;
+    const body = `<div class="facets-stack">${rows}${base}<div class="facets-note">${esc(t('history_note'))}</div></div>`;
+    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
     return [head, body, foot];
 }
 
@@ -496,6 +566,12 @@ function viewSettings() {
         </div>
         <div class="facets-section">
           ${toggleRow('tellAI', t('tell_ai'), t('tell_ai_note'))}
+          <label class="facets-field">
+            <span class="facets-flabel">${esc(t('tell_count'))}</span>
+            <select class="facets-select" data-act="tell-count">
+              ${[1, 3, 5, 0].map(n => `<option value="${n}"${settings().tellCount === n ? ' selected' : ''}>${esc(n ? t('tell_count_n', { n }) : t('tell_count_always'))}</option>`).join('')}
+            </select>
+          </label>
         </div>
         <div class="facets-section">
           <label class="facets-field">
@@ -931,7 +1007,9 @@ async function confirmBox(text, okText) {
 function wear(outfitId) {
     const key = activeKey();
     if (!key) return;
-    choose(key, outfitId, scopeNow(), chatAvailable() ? currentScene().chatKey : null);
+    const scope = scopeNow();
+    choose(key, outfitId, scope, chatAvailable() ? currentScene().chatKey : null,
+        { since: scope === 'chat' && settings().sinceMode });
     applyAllSoon();
     render();
 }
@@ -982,6 +1060,10 @@ function onClick(e) {
         case 'back': back(); break;
         case 'tab': state.tab = el.dataset.tab; state.drawer = ''; state.screen = 'wardrobe'; render(); break;
         case 'drawer': state.drawer = el.dataset.drawer || ''; render(); break;
+        case 'history': state.screen = 'history'; render(); break;
+        case 'history-delete': removePoint(Number(el.dataset.t)); break;
+        case 'ai-mute': muteTell(currentScene().chatKey, activeKey()); applyAllSoon(); render(); break;
+        case 'ai-again': tellAgain(currentScene().chatKey, activeKey()); applyAllSoon(); render(); break;
         case 'drawers': state.screen = 'drawers'; render(); break;
         case 'drawers-done': state.screen = 'organize'; render(); break;
         case 'drawer-add': addDrawerFromInput(); break;
@@ -1034,6 +1116,17 @@ function onClick(e) {
     }
 }
 
+async function removePoint(time) {
+    const key = activeKey();
+    const chatKey = currentScene().chatKey;
+    const p = timelineOf(chatKey, key)?.points.find(x => x.t === time);
+    if (!p) return;
+    if (!(await confirmBox(t('confirm_history_delete', { name: markLabel(key, p.id), time: timeLabel(p.t) }), t('delete')))) return;
+    deletePoint(chatKey, key, time);
+    applyAllSoon();
+    render();
+}
+
 function addDrawerFromInput() {
     const key = activeKey();
     const input = root.querySelector('.facets-drawer-new');
@@ -1078,6 +1171,7 @@ function onChange(e) {
         settings()[el.dataset.setting] = el.checked;
         save();
         applyAllSoon();
+        if (state.screen === 'wardrobe') render();
         return;
     }
     switch (act) {
@@ -1086,6 +1180,7 @@ function onChange(e) {
             state.drawer = '';
             render(); break;
         case 'pair-target': state.pairTarget = el.value; render(); break;
+        case 'tell-count': settings().tellCount = Number(el.value); save(); applyAllSoon(); break;
         case 'lang':
             chooseLang(el.value); setLanguage(el.value); render();
             document.dispatchEvent(new CustomEvent('facets:lang'));

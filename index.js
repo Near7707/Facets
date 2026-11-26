@@ -10,11 +10,11 @@ import {
 import { deletePath } from './src/images.js';
 import {
     initPersonaSource, setPersonaHint, applyAllSoon, updatePrompt, fixZoom,
-    startObservers, currentScene,
+    startObservers, currentScene, checkBranch, setPendingGeneration,
 } from './src/apply.js';
 import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender } from './src/ui.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 setVersion(VERSION);
 
 function langOptions() {
@@ -103,6 +103,7 @@ function registerEvents() {
     const on = (name, fn) => { if (name) eventSource.on(name, fn); };
 
     on(ev.CHAT_CHANGED, () => {
+        try { checkBranch(); } catch (e) { console.error('[Facets]', e); }
         applyAllSoon();
         if (isOpen()) refreshIfOpen();
     });
@@ -110,12 +111,24 @@ function registerEvents() {
         ev.MESSAGE_UPDATED, ev.MESSAGE_SWIPED, ev.MESSAGE_EDITED, ev.CHAT_LOADED, ev.CHARACTER_PAGE_LOADED]) {
         on(name, applyAllSoon);
     }
+    // New replies change "N left" in the wardrobe.
+    for (const name of [ev.CHARACTER_MESSAGE_RENDERED, ev.MESSAGE_SWIPED, ev.MESSAGE_DELETED]) {
+        on(name, () => refreshIfOpen());
+    }
     on(ev.PERSONA_CHANGED, (avatar) => {
         setPersonaHint(avatar);
         applyAllSoon();
         refreshIfOpen();
     });
-    on(ev.GENERATION_STARTED, () => { try { updatePrompt(); } catch (e) { console.error('[Facets]', e); } });
+    on(ev.GENERATION_STARTED, (type, _opts, dryRun) => {
+        try {
+            if (!dryRun) setPendingGeneration(type);
+            updatePrompt(dryRun ? type : undefined);
+        } catch (e) { console.error('[Facets]', e); }
+    });
+    for (const name of [ev.GENERATION_ENDED, ev.GENERATION_STOPPED]) {
+        on(name, () => { setPendingGeneration(''); applyAllSoon(); });
+    }
     on(ev.CHARACTER_RENAMED, (oldAvatar, newAvatar) => {
         onCharacterRenamed(oldAvatar, newAvatar);
         applyAllSoon();

@@ -29,6 +29,19 @@
     if (params.has('fresh')) { for (const k of Object.keys(extensionSettings)) delete extensionSettings[k]; if (params.get('lang')) extensionSettings.facets = { lang: params.get('lang'), langChosen: true }; }
     const prompts = {};
     const state = { characterId: params.has('nochat') ? undefined : 0, personaMod: null, persona: 'juno.png' };
+    // Chat messages per chat name, with send times like SillyTavern (ISO; very old chats use the humanized format).
+    const chats = {};
+    const metas = {};
+    function messagesOf(name) {
+        if (!chats[name]) {
+            const now = Date.now();
+            chats[name] = [0, 1, 2, 3].map(i => ({
+                is_user: i % 2 === 1, is_system: false, mes: `Message ${i}`,
+                send_date: i === 0 ? 'January 1, 2026 9:05am' : new Date(now - (4 - i) * 60000).toISOString(),
+            }));
+        }
+        return chats[name];
+    }
 
     const ctx = {
         characters, extensionSettings, eventSource, eventTypes, event_types: eventTypes,
@@ -38,6 +51,8 @@
         name1: 'Juno',
         powerUserSettings: { personas },
         getCurrentChatId: () => characters[state.characterId]?.chat,
+        get chat() { const c = characters[state.characterId]; return c ? messagesOf(c.chat) : []; },
+        get chatMetadata() { const c = characters[state.characterId]; return c ? (metas[c.chat] ||= {}) : {}; },
         saveSettingsDebounced: () => localStorage.setItem('facets_test_settings', JSON.stringify(extensionSettings)),
         setExtensionPrompt: (key, value) => { prompts[key] = value; document.getElementById('prompt_out').textContent = value || '(no prompt)'; },
         getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
@@ -52,11 +67,13 @@
         chat.innerHTML = '';
         const ch = characters[state.characterId];
         if (!ch) return;
-        for (let i = 0; i < 4; i++) addMessage(i % 2 === 1, i);
+        messagesOf(ch.chat).forEach((m, i) => addMessage(m.is_user, i, true));
     }
-    function addMessage(isUser, i) {
+    function addMessage(isUser, i, existing = false) {
         const ch = characters[state.characterId];
         const chat = document.getElementById('chat');
+        i = i ?? chat.children.length;
+        if (!existing) messagesOf(ch.chat)[i] = { is_user: isUser, is_system: false, mes: `Message ${i}`, send_date: new Date().toISOString() };
         const div = document.createElement('div');
         div.className = 'mes';
         div.setAttribute('mesid', String(i ?? chat.children.length));
@@ -76,7 +93,18 @@
         ctx, prompts, emit: (n, ...a) => eventSource.emit(eventTypes[n.toUpperCase()] || n, ...a),
         async selectChar(i) { state.characterId = i; renderChat(); await eventSource.emit(eventTypes.CHAT_CHANGED, ctx.getCurrentChatId()); },
         async selectPersona(a) { state.persona = a; state.personaMod?._setUserAvatar(a); renderChat(); await eventSource.emit(eventTypes.PERSONA_CHANGED, a); },
-        addMessage, renderChat, renderList, state,
+        addMessage, renderChat, renderList, state, chats, metas,
+        /** Like SillyTavern's "branch": a new chat with the same messages and main_chat pointing back. */
+        async branch() {
+            const c = characters[state.characterId];
+            const from = c.chat;
+            c.chat = from + ' Branch';
+            chats[c.chat] = structuredClone(messagesOf(from));
+            metas[c.chat] = { main_chat: from };
+            renderChat();
+            await eventSource.emit(eventTypes.CHAT_CHANGED, c.chat);
+        },
+        async openChat(name) { characters[state.characterId].chat = name; renderChat(); await eventSource.emit(eventTypes.CHAT_CHANGED, name); },
     };
 
     window.__facetsBoot = (async () => {
@@ -99,6 +127,8 @@
         pp.innerHTML = Object.entries(personas).map(([a, n]) => `<option value="${a}">${n}</option>`).join('');
         pp.onchange = () => window.__fakeST.selectPersona(pp.value);
         document.getElementById('btn_new_msg').onclick = () => addMessage(false, document.getElementById('chat').children.length);
+        const nu = document.getElementById('btn_new_user'); if (nu) nu.onclick = () => addMessage(true, document.getElementById('chat').children.length);
+        const br = document.getElementById('btn_branch'); if (br) br.onclick = () => window.__fakeST.branch();
         document.getElementById('btn_rename_char').onclick = async () => {
             const c = characters[state.characterId]; const old = c.avatar; c.avatar = 'aria2.png'; c.name = 'Aria Renamed';
             renderList(); renderChat(); await eventSource.emit(eventTypes.CHARACTER_RENAMED, old, c.avatar);

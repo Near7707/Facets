@@ -1,7 +1,10 @@
 // Shows the chosen outfits on avatars and passes look descriptions to the AI.
 // Only reads/changes <img> elements on screen; chat data is never modified.
 
-import { ctx, settings, charKey, personaKey, effectiveOutfit, chatOnlyOutfit, chatKeyFor, findOutfit } from './store.js';
+import {
+    ctx, settings, charKey, personaKey, effectiveOutfit, chatOnlyOutfit, chatKeyFor, findOutfit, chatChoice,
+    outfitAt, tellOf, setupBranch, DEFAULT_MARK,
+} from './store.js';
 import { urlOf } from './images.js';
 
 const PROMPT_KEY = 'facets_appearance';
@@ -40,6 +43,16 @@ export function currentCharacter() {
     if (c.groupId) return null;
     const ch = c.characters?.[c.characterId];
     return ch && ch.avatar && ch.avatar !== 'none' ? ch : null;
+}
+
+/** A branch or checkpoint chat starts with the outfits of the chat it came from (read-only look at chat metadata). */
+export function checkBranch() {
+    const scene = currentScene();
+    if (!scene.chatKey || !scene.character) return false;
+    let parent = '';
+    try { parent = String(ctx().chatMetadata?.main_chat || ''); } catch { /* ignore */ }
+    if (!parent) return false;
+    return setupBranch(scene.chatKey, chatKeyFor(scene.character.avatar, parent.replace(/\.jsonl$/i, '')));
 }
 
 /** The chat being shown, as Facets sees it. */
@@ -128,6 +141,36 @@ function originalSrc(img) {
     return now;
 }
 
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+/**
+ * When a message was sent, in ms. SillyTavern uses ISO times; very old chats use "January 1, 2026 9:05am".
+ * Unknown → Infinity (shown with the current outfit).
+ */
+export function messageTime(mes) {
+    const v = mes?.send_date;
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v !== 'string' || !v.trim()) return Infinity;
+    const m = /^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(v.trim());
+    if (m) {
+        const month = MONTHS.indexOf(m[1].toLowerCase());
+        if (month >= 0) {
+            let h = Number(m[4]) % 12;
+            if (!m[7]) h = Number(m[4]);
+            else if (m[7].toLowerCase() === 'pm') h += 12;
+            return new Date(Number(m[3]), month, Number(m[2]), h, Number(m[5]), Number(m[6] || 0)).getTime();
+        }
+    }
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : Infinity;
+}
+
+function chatMessage(img) {
+    const id = img.closest('.mes')?.getAttribute('mesid');
+    if (id === null || id === undefined) return null;
+    return ctx().chat?.[Number(id)] || null;
+}
+
 export function applyChat() {
     const s = settings();
     const scene = currentScene();
@@ -140,7 +183,8 @@ export function applyChat() {
             if (img.dataset.facetsApplied) restoreImg(img);
             continue;
         }
-        setImg(img, key, effectiveOutfit(key, scene.chatKey));
+        // With a "from now on" history each message shows the outfit of its own time.
+        setImg(img, key, outfitAt(key, scene.chatKey, messageTime(chatMessage(img))));
     }
 }
 
@@ -208,25 +252,72 @@ export function applyAllSoon() {
     });
 }
 
-export function updatePrompt() {
+/** AI replies in this chat sent after `since`. While regenerating, the reply being replaced is not counted. */
+function repliesSince(since, skipLast) {
+    const chat = ctx().chat || [];
+    let end = chat.length;
+    if (skipLast && end && !chat[end - 1]?.is_user) end--;
+    let n = 0;
+    for (let i = 0; i < end; i++) {
+        const m = chat[i];
+        if (!m || m.is_user || m.is_system) continue;
+        if (messageTime(m) > since) n++;
+    }
+    return n;
+}
+
+/**
+ * Whether the look of one entity is being described to the AI in the open chat.
+ * kind: off | nochat | notchat | default | empty | always | sending | muted | done | none
+ */
+export function tellStatus(entityKey, chatKey, skipLast = false) {
+    const s = settings();
+    if (!s.tellAI) return { kind: 'off' };
+    if (!chatKey || !entityKey) return { kind: 'nochat' };
+    const pick = chatChoice(chatKey, entityKey);
+    if (pick === undefined) return { kind: 'notchat' };
+    if (pick === DEFAULT_MARK) return { kind: 'default' };
+    const o = chatOnlyOutfit(entityKey, chatKey);
+    const desc = o?.desc?.trim() || '';
+    if (!desc) return { kind: 'empty' };
+    if (!s.tellCount) return { kind: 'always', desc };
+    const cell = tellOf(chatKey, entityKey);
+    if (!cell) return { kind: 'none', desc };
+    if (cell.muted) return { kind: 'muted', desc };
+    const left = s.tellCount - repliesSince(cell.t, skipLast);
+    return left > 0 ? { kind: 'sending', left, desc } : { kind: 'done', desc };
+}
+
+// Generation type while a reply is being made, so redraws during it keep the same count.
+let pendingGen = '';
+export function setPendingGeneration(type) { pendingGen = String(type || ''); }
+
+/** @param {string} [genType] SillyTavern's generation type ("swipe", "regenerate", "continue", …) */
+export function updatePrompt(genType = pendingGen) {
     const c = ctx();
     const s = settings();
     const scene = currentScene();
     const lines = [];
+    const skipLast = ['swipe', 'regenerate', 'continue'].includes(String(genType || ''));
     // Only "This chat only" picks are described; a whole-character pick changes the picture only.
     if (s.tellAI && scene.character && !scene.inGroup && scene.chatKey) {
-        const co = chatOnlyOutfit(scene.charKey, scene.chatKey);
-        if (co?.desc?.trim()) lines.push(`${scene.character.name}: ${co.desc.trim()}`);
-        if (scene.personaKey) {
-            const po = chatOnlyOutfit(scene.personaKey, scene.chatKey);
-            if (po?.desc?.trim()) lines.push(`${personaName(scene.personaAvatar)}: ${po.desc.trim()}`);
+        const who = [[scene.charKey, scene.character.name]];
+        if (scene.personaKey) who.push([scene.personaKey, personaName(scene.personaAvatar)]);
+        for (const [key, name] of who) {
+            const st = tellStatus(key, scene.chatKey, skipLast);
+            if (st.kind === 'always' || st.kind === 'sending') lines.push(`${name}: ${st.desc}`);
         }
     }
-    const text = lines.length
-        ? `[Appearance reference]\n${lines.join('\n')}\n`
+    let text = '';
+    if (lines.length && !s.tellCount) {
+        text = `[Appearance reference]\n${lines.join('\n')}\n`
           + '(Default look for reference only. If the story has shown a change of clothes or appearance, follow the story. '
-          + 'Mention the look only when it matters to the scene; do not bring it up on its own.)'
-        : '';
+          + 'Mention the look only when it matters to the scene; do not bring it up on its own.)';
+    } else if (lines.length) {
+        text = `[Appearance update]\n${lines.join('\n')}\n`
+          + '(This is how they look now; the look has just changed. Do not write a scene of changing clothes. '
+          + 'Mention the look only when it matters to the scene. If the story has since shown a different look, follow the story.)';
+    }
     // 0 = in prompt (after the story string), depth 0, no world-info scan, system role.
     c.setExtensionPrompt(PROMPT_KEY, text, 0, 0, false, 0);
 }

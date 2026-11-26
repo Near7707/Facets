@@ -11,12 +11,21 @@ const DEFAULTS = Object.freeze({
     showInChat: true,
     showInList: true,
     tellAI: false, // off until the user turns it on
+    tellCount: 3, // after a change, describe the look for this many AI replies (0 = every time)
+    sinceMode: false, // "From now on": a change keeps older messages in the older outfit
     backupImages: true,
     // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null }
     // key is "char:<avatar file>" or "persona:<avatar file>"
     entities: {},
     // "<character avatar>::<chat file name>" -> { entityKey: outfitId | DEFAULT_MARK }
     chats: {},
+    // "From now on" history: chatKey -> { entityKey: { base, points: [{ t, id }] } }
+    // base = what older messages show (outfitId | DEFAULT_MARK | null = same as all chats).
+    timelines: {},
+    // When to describe the look to the AI: chatKey -> { entityKey: { t, muted? } }
+    tells: {},
+    // Branch chats already set up from their parent chat: chatKey -> parent chatKey
+    branchDone: {},
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -49,6 +58,17 @@ export function migrate(s) {
     if (typeof s.format !== 'number') s.format = FORMAT;
     // Future format upgrades go here: if (s.format < 2) { ...; s.format = 2; }
     if (!Array.isArray(s.files)) s.files = [];
+    for (const k of ['chats', 'timelines', 'tells', 'branchDone']) {
+        if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
+    }
+    if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
+    for (const row of Object.values(s.timelines)) {
+        for (const [ek, tl] of Object.entries(row || {})) {
+            if (!tl || !Array.isArray(tl.points)) { delete row[ek]; continue; }
+            tl.points = tl.points.filter(p => p && Number.isFinite(p.t) && p.id).sort((a, b) => a.t - b.t);
+            if (tl.base === undefined) tl.base = null;
+        }
+    }
     for (const e of Object.values(s.entities)) {
         if (!Array.isArray(e.outfits)) e.outfits = [];
         if (e.global === undefined) e.global = null;
@@ -177,38 +197,155 @@ export function deleteDrawer(entityKey, drawerId) {
     for (const o of e.outfits) o.drawers = o.drawers.filter(id => id !== drawerId);
 }
 
+// Tables keyed by chat, each row keyed by entity.
+const CHAT_TABLES = ['chats', 'timelines', 'tells'];
+
+function rowOf(table, chatKey, create = false) {
+    const s = settings();
+    if (!s[table][chatKey] && create) s[table][chatKey] = {};
+    return s[table][chatKey] || null;
+}
+
+function dropCell(table, chatKey, entityKey) {
+    const s = settings();
+    const row = s[table][chatKey];
+    if (!row) return;
+    delete row[entityKey];
+    if (!Object.keys(row).length) delete s[table][chatKey];
+}
+
+/** "From now on" history of one entity in one chat, or null. */
+export function timelineOf(chatKey, entityKey) {
+    if (!chatKey) return null;
+    const tl = settings().timelines[chatKey]?.[entityKey];
+    return tl?.points?.length ? tl : null;
+}
+
+function outfitFromMark(entityKey, mark) {
+    if (mark === null || mark === undefined) return findOutfit(entityKey, getEntity(entityKey)?.global);
+    if (mark === DEFAULT_MARK) return null;
+    return findOutfit(entityKey, mark);
+}
+
+/** The outfit a message sent at `time` (ms) shows. Without a history this is the current look. */
+export function outfitAt(entityKey, chatKey, time) {
+    const tl = timelineOf(chatKey, entityKey);
+    if (!tl || !Number.isFinite(time)) return effectiveOutfit(entityKey, chatKey);
+    let mark;
+    let found = false;
+    for (const p of tl.points) {
+        if (p.t <= time) { mark = p.id; found = true; } else break;
+    }
+    return outfitFromMark(entityKey, found ? mark : tl.base);
+}
+
+/** Description the AI would get for this pick ('' if none). */
+function descNow(entityKey, chatKey) {
+    return chatOnlyOutfit(entityKey, chatKey)?.desc?.trim() || '';
+}
+
 /**
  * Change one entity (and its matching-set partner).
  * @param {string} entityKey
  * @param {string|null} outfitId null = default look
  * @param {'chat'|'all'} scope
  * @param {string|null} chatKey
+ * @param {{ since?: boolean, now?: number }} [opts] since = keep older messages in the older outfit
  */
-export function choose(entityKey, outfitId, scope, chatKey) {
-    setOne(entityKey, outfitId, scope, chatKey);
+export function choose(entityKey, outfitId, scope, chatKey, opts = {}) {
+    const now = opts.now ?? Date.now();
+    setOne(entityKey, outfitId, scope, chatKey, opts.since, now);
     const o = findOutfit(entityKey, outfitId);
     if (o?.pair && findOutfit(o.pair.key, o.pair.id)) {
-        setOne(o.pair.key, o.pair.id, scope, chatKey);
+        setOne(o.pair.key, o.pair.id, scope, chatKey, opts.since, now);
     }
     save();
 }
 
-function setOne(entityKey, outfitId, scope, chatKey) {
+function setOne(entityKey, outfitId, scope, chatKey, since, now) {
     const s = settings();
     const e = getEntity(entityKey, true);
+    const mark = outfitId || DEFAULT_MARK;
     if (scope === 'chat' && chatKey) {
-        const row = s.chats[chatKey] || (s.chats[chatKey] = {});
-        row[entityKey] = outfitId || DEFAULT_MARK;
+        const before = descNow(entityKey, chatKey);
+        const row = rowOf('chats', chatKey, true);
+        const prev = row[entityKey]; // undefined = same as all chats
+        if (since) {
+            const tlRow = rowOf('timelines', chatKey, true);
+            const tl = tlRow[entityKey] || (tlRow[entityKey] = { base: prev ?? null, points: [] });
+            const last = tl.points[tl.points.length - 1];
+            const shownNow = last ? last.id : (prev ?? null);
+            if (shownNow !== mark) tl.points.push({ t: now, id: mark });
+            if (!tl.points.length) dropCell('timelines', chatKey, entityKey);
+        } else {
+            // Changing the whole chat replaces its history.
+            dropCell('timelines', chatKey, entityKey);
+        }
+        row[entityKey] = mark;
+        // Tell the AI only when the description really changed.
+        const after = descNow(entityKey, chatKey);
+        if (!after) dropCell('tells', chatKey, entityKey);
+        else if (after !== before) rowOf('tells', chatKey, true)[entityKey] = { t: now };
     } else {
         e.global = outfitId || null;
-        // "Whole character" applies to every chat: drop per-chat picks for this entity.
-        for (const [k, row] of Object.entries(s.chats)) {
-            if (entityKey in row) {
-                delete row[entityKey];
-                if (!Object.keys(row).length) delete s.chats[k];
-            }
+        // "Whole character" applies to every chat: drop per-chat picks, histories and tells for this entity.
+        for (const table of CHAT_TABLES) {
+            for (const k of Object.keys(s[table])) dropCell(table, k, entityKey);
         }
     }
+}
+
+/** Remove one change from a chat's history. */
+export function deletePoint(chatKey, entityKey, t) {
+    const tl = timelineOf(chatKey, entityKey);
+    if (!tl) return;
+    tl.points = tl.points.filter(p => p.t !== t);
+    const row = rowOf('chats', chatKey, true);
+    if (tl.points.length) {
+        row[entityKey] = tl.points[tl.points.length - 1].id;
+    } else {
+        if (tl.base === null) dropCell('chats', chatKey, entityKey);
+        else row[entityKey] = tl.base;
+        dropCell('timelines', chatKey, entityKey);
+    }
+    if (!descNow(entityKey, chatKey)) dropCell('tells', chatKey, entityKey);
+    save();
+}
+
+/** "Tell again": describe the current look for the next few replies. */
+export function tellAgain(chatKey, entityKey, now = Date.now()) {
+    if (!chatKey || !descNow(entityKey, chatKey)) return;
+    rowOf('tells', chatKey, true)[entityKey] = { t: now };
+    save();
+}
+
+/** "Not this time": stop describing until the next change or "tell again". */
+export function muteTell(chatKey, entityKey) {
+    const cell = settings().tells[chatKey]?.[entityKey];
+    if (cell) { cell.muted = true; save(); }
+}
+
+export function tellOf(chatKey, entityKey) {
+    return chatKey ? settings().tells[chatKey]?.[entityKey] || null : null;
+}
+
+/**
+ * A branch (or checkpoint) chat starts with its parent's picks, history and tells. Done once per chat.
+ * @returns {boolean} true if something was copied
+ */
+export function setupBranch(chatKey, parentKey) {
+    const s = settings();
+    if (!chatKey || !parentKey || chatKey === parentKey || s.branchDone[chatKey]) return false;
+    s.branchDone[chatKey] = parentKey;
+    let copied = false;
+    for (const table of CHAT_TABLES) {
+        if (s[table][parentKey] && !s[table][chatKey]) {
+            s[table][chatKey] = structuredClone(s[table][parentKey]);
+            copied = true;
+        }
+    }
+    save();
+    return copied;
 }
 
 /** Remove every reference to an outfit (chat picks, global pick, partner pairs). */
@@ -223,6 +360,17 @@ export function forgetOutfit(entityKey, outfitId) {
     for (const [k, row] of Object.entries(s.chats)) {
         if (row[entityKey] === outfitId) delete row[entityKey];
         if (!Object.keys(row).length) delete s.chats[k];
+    }
+    for (const k of Object.keys(s.timelines)) {
+        const tl = s.timelines[k][entityKey];
+        if (!tl) continue;
+        tl.points = tl.points.filter(p => p.id !== outfitId);
+        if (tl.base === outfitId) tl.base = null;
+        if (!tl.points.length) dropCell('timelines', k, entityKey);
+        else if (s.chats[k]) s.chats[k][entityKey] = tl.points[tl.points.length - 1].id;
+    }
+    for (const k of Object.keys(s.tells)) {
+        if (s.tells[k][entityKey] && !descNow(entityKey, k)) dropCell('tells', k, entityKey);
     }
 }
 
@@ -269,12 +417,20 @@ export function onCharacterRenamed(oldAvatar, newAvatar) {
             }
         }
     }
-    for (const [k, row] of Object.entries(s.chats)) {
-        if (oldKey in row) { row[newKey] = row[oldKey]; delete row[oldKey]; }
+    for (const table of CHAT_TABLES) {
+        for (const [k, row] of Object.entries(s[table])) {
+            if (oldKey in row) { row[newKey] = row[oldKey]; delete row[oldKey]; }
+            if (k.startsWith(oldAvatar + '::')) {
+                const nk = newAvatar + k.slice(oldAvatar.length);
+                if (!s[table][nk]) s[table][nk] = row;
+                delete s[table][k];
+            }
+        }
+    }
+    for (const k of Object.keys(s.branchDone)) {
         if (k.startsWith(oldAvatar + '::')) {
-            const nk = newAvatar + k.slice(oldAvatar.length);
-            if (!s.chats[nk]) s.chats[nk] = row;
-            delete s.chats[k];
+            s.branchDone[newAvatar + k.slice(oldAvatar.length)] = s.branchDone[k];
+            delete s.branchDone[k];
         }
     }
     save();
@@ -285,21 +441,28 @@ export function onChatRenamed(avatar, oldFile, newFile) {
     const oldKey = chatKeyFor(avatar, strip(oldFile));
     const newKey = chatKeyFor(avatar, strip(newFile));
     const s = settings();
-    if (!oldKey || !newKey || !s.chats[oldKey]) return;
+    if (!oldKey || !newKey) return;
     // If something is already stored under the new name we can't tell which is right: keep both as they are.
-    if (s.chats[newKey]) return;
-    s.chats[newKey] = s.chats[oldKey];
-    delete s.chats[oldKey];
-    save();
+    if (s.chats[newKey] || s.timelines[newKey]) return;
+    let moved = false;
+    for (const table of [...CHAT_TABLES, 'branchDone']) {
+        if (s[table][oldKey] === undefined) continue;
+        s[table][newKey] = s[table][oldKey];
+        delete s[table][oldKey];
+        moved = true;
+    }
+    if (moved) save();
 }
 
 export function onChatDeleted(avatar, chatName) {
-    const key = chatKeyFor(avatar, chatName);
+    const key = chatKeyFor(avatar, String(chatName || '').replace(/\.jsonl$/i, ''));
     const s = settings();
-    if (key && s.chats[key]) {
-        delete s.chats[key];
-        save();
+    if (!key) return;
+    let changed = false;
+    for (const table of [...CHAT_TABLES, 'branchDone']) {
+        if (s[table][key] !== undefined) { delete s[table][key]; changed = true; }
     }
+    if (changed) save();
 }
 
 /** Returns the file paths that belonged to the removed entity. */
@@ -315,10 +478,15 @@ export function removeEntity(key) {
         delete s.entities[key];
     }
     const avatar = avatarOfKey(key);
-    for (const [k, row] of Object.entries(s.chats)) {
-        delete row[key];
-        if (isCharKey(key) && k.startsWith(avatar + '::')) delete s.chats[k];
-        else if (!Object.keys(row).length) delete s.chats[k];
+    for (const table of CHAT_TABLES) {
+        for (const [k, row] of Object.entries(s[table])) {
+            delete row[key];
+            if (isCharKey(key) && k.startsWith(avatar + '::')) delete s[table][k];
+            else if (!Object.keys(row).length) delete s[table][k];
+        }
+    }
+    if (isCharKey(key)) {
+        for (const k of Object.keys(s.branchDone)) if (k.startsWith(avatar + '::')) delete s.branchDone[k];
     }
     save();
     return files.filter(Boolean);

@@ -4,7 +4,8 @@ import { t } from './i18n.js';
 import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
-const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'backupImages'];
+const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone'];
 
 export async function exportBackup(toast) {
     const s = settings();
@@ -15,6 +16,9 @@ export async function exportBackup(toast) {
         prefs: Object.fromEntries(PREF_KEYS.map(k => [k, s[k]])),
         entities: structuredClone(s.entities),
         chats: structuredClone(s.chats),
+        timelines: structuredClone(s.timelines),
+        tells: structuredClone(s.tells),
+        branchDone: structuredClone(s.branchDone),
         images: null,
     };
     if (s.backupImages) {
@@ -59,7 +63,7 @@ export async function importBackup(file, toast) {
     toast?.('info', t('importing'));
     const s = settings();
     const entities = structuredClone(data.entities);
-    const chats = structuredClone(data.chats || {});
+    const tables = Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(data[k] || {})]));
     if (data.images && typeof data.images === 'object') {
         const moved = new Map();
         let failed = 0;
@@ -83,8 +87,11 @@ export async function importBackup(file, toast) {
     }
     const files = s.files; // keep the full list so cleanup can still find older uploads
     s.entities = entities;
-    s.chats = chats;
-    for (const k of PREF_KEYS) if (typeof data.prefs?.[k] === 'boolean') s[k] = data.prefs[k];
+    for (const k of CHAT_TABLES) s[k] = tables[k];
+    for (const k of PREF_KEYS) {
+        const v = data.prefs?.[k];
+        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number')) s[k] = v;
+    }
     s.files = files;
     migrate(s);
     save();
