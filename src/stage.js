@@ -24,6 +24,7 @@ let toolsKey = ''; // whose tool bar is open
 let gesture = null;
 const pointers = new Map();
 let rotHandle = null;
+let sizeHandle = null; // 0.7.1: corner handle to resize
 let holes = []; // cut-out boxes in layer coordinates
 let geo = null; // { L, T, W, H } of the layer in the window
 
@@ -418,7 +419,7 @@ function drawOne(key) {
         left: `${b.left}px`, top: `${b.top}px`, width: `${b.w}px`, height: `${b.h}px`,
         transform: b.rot ? `rotate(${b.rot}deg)` : '', opacity: String(st.opacity),
     });
-    f.center = { x: b.cx, y: b.cy, h: b.h, rot: b.rot };
+    f.center = { x: b.cx, y: b.cy, w: b.w, h: b.h, rot: b.rot };
     // Visible part of the box around the picture.
     const vl = clamp(b.cx - b.bw / 2, 0, W), vr = clamp(b.cx + b.bw / 2, 0, W);
     const vt = clamp(b.cy - b.bh / 2, 0, H), vb = clamp(b.cy + b.bh / 2, 0, H);
@@ -449,6 +450,8 @@ function closeTools() {
     toolsEl()?.remove();
     rotHandle?.remove();
     rotHandle = null;
+    sizeHandle?.remove();
+    sizeHandle = null;
 }
 
 const deg = (r) => `${Math.round(normRot(r))}°`;
@@ -460,7 +463,7 @@ function openTools(key) {
     toolsKey = key;
     syncTheme(layer);
     const bar = document.createElement('div');
-    bar.className = 'facets-stage-tools';
+    bar.className = st.locked ? 'facets-stage-tools is-locked' : 'facets-stage-tools';
     bar.dataset.key = key;
     const rot = placeNow(key).rot || 0;
     bar.innerHTML = st.locked
@@ -487,6 +490,14 @@ function openTools(key) {
         rotHandle.setAttribute('aria-label', t('stage_rot_drag'));
         rotHandle.innerHTML = '<i class="fa-solid fa-rotate"></i>';
         layer.appendChild(rotHandle);
+        sizeHandle = document.createElement('button');
+        sizeHandle.type = 'button';
+        sizeHandle.className = 'facets-stage-size';
+        sizeHandle.dataset.key = key;
+        sizeHandle.title = t('stage_size_drag');
+        sizeHandle.setAttribute('aria-label', t('stage_size_drag'));
+        sizeHandle.innerHTML = '<i class="fa-solid fa-up-right-and-down-left-from-center"></i>';
+        layer.appendChild(sizeHandle);
     }
     placeTools();
 }
@@ -512,7 +523,7 @@ function placeTools() {
     const cx = (v.left + v.right) / 2;
     const left = clamp(cx - bw / 2, 4, Math.max(4, W - bw - 4));
     let top = v.top - bh - 8 - (rotHandle ? 40 : 0);
-    if (top < 4) top = Math.min(v.bottom + 8, H - bh - 4);
+    if (top < 4) top = Math.min(v.bottom + 8 + (sizeHandle ? 20 : 0), H - bh - 4);
     if (top < 4) top = 4;
     // Never under the input bar.
     for (const h of holes) {
@@ -529,6 +540,26 @@ function placeTools() {
         rotHandle.style.left = `${clamp(x - 17, 2, W - 36)}px`;
         rotHandle.style.top = `${clamp(y - 17, 2, H - 36)}px`;
         rotHandle.hidden = !!f.fig.hidden;
+    }
+    if (sizeHandle && f.center) {
+        // On the bottom right corner of the picture, turned with it.
+        const c = f.center, a = c.rot * Math.PI / 180;
+        const hw = c.w / 2, hh = c.h / 2;
+        let x = c.x + hw * Math.cos(a) - hh * Math.sin(a);
+        let y = c.y + hw * Math.sin(a) + hh * Math.cos(a);
+        x = clamp(x, 19, W - 19);
+        y = clamp(y, 19, H - 19);
+        // Not behind the input bar: sit just above it.
+        for (const h of holes) {
+            if (x + 17 > h.l && x - 17 < h.r && y + 17 > h.t && y - 17 < h.b) y = Math.max(19, h.t - 19);
+        }
+        sizeHandle.style.left = `${x - 17}px`;
+        sizeHandle.style.top = `${y - 17}px`;
+        // Arrow and mouse cursor follow the corner's direction.
+        sizeHandle.querySelector('i').style.transform = `rotate(${90 + c.rot}deg)`;
+        const d = ((45 + c.rot) % 180 + 180) % 180;
+        sizeHandle.style.cursor = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'][Math.round(d / 45) % 4];
+        sizeHandle.hidden = !!f.fig.hidden;
     }
 }
 
@@ -550,6 +581,13 @@ function angleTo(key, x, y) {
     return Math.atan2(x - geo.L - c.x, -(y - geo.T - c.y)) * 180 / Math.PI;
 }
 
+/** Distance from the picture's middle to a point on the screen. */
+function distTo(key, x, y) {
+    const c = figures.get(key)?.center;
+    if (!c || !geo) return 0;
+    return Math.hypot(x - geo.L - c.x, y - geo.T - c.y);
+}
+
 function onDown(e) {
     if (e.button !== undefined && e.button > 0) return;
     const rot = e.target.closest('.facets-stage-rot');
@@ -563,6 +601,19 @@ function onDown(e) {
         pointers.clear();
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         gesture = { key, kind: 'rot', start, a0: angleTo(key, e.clientX, e.clientY), moved: false, t0: Date.now() };
+        return;
+    }
+    const sz = e.target.closest('.facets-stage-size');
+    if (sz) {
+        const key = sz.dataset.key;
+        const st = stOf(key);
+        if (!st || st.locked) return;
+        e.preventDefault();
+        try { sz.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        const start = { ...currentPlace(key) };
+        pointers.clear();
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        gesture = { key, kind: 'size', start, d0: distTo(key, e.clientX, e.clientY), moved: false, t0: Date.now() };
         return;
     }
     const fig = e.target.closest('.facets-fig');
@@ -596,6 +647,15 @@ function onMove(e) {
         const a = angleTo(key, e.clientX, e.clientY);
         gesture.moved = true;
         setPlace(key, { ...gesture.start, rot: snapRot(gesture.start.rot + a - gesture.a0) });
+        return;
+    }
+    if (gesture.kind === 'size') {
+        // The middle stays put; farther from it = bigger.
+        const d = distTo(key, e.clientX, e.clientY);
+        if (gesture.d0 > 4 && d > 0) {
+            gesture.moved = true;
+            setPlace(key, { ...gesture.start, size: gesture.start.size * d / gesture.d0 });
+        }
         return;
     }
     if (pointers.size >= 2) {
@@ -642,7 +702,7 @@ function dropAll() {
 }
 
 function onWheel(e) {
-    const fig = e.target.closest('.facets-fig, .facets-stage-rot');
+    const fig = e.target.closest('.facets-fig, .facets-stage-rot, .facets-stage-size');
     if (!fig) return;
     const key = fig.dataset.key;
     const st = stOf(key);
@@ -714,7 +774,7 @@ function onInput(e) {
 // A tap anywhere else closes the tool bar.
 function onOutside(e) {
     if (!toolsKey || !layer) return;
-    if (e.target.closest?.('.facets-stage-tools, .facets-stage-dot, .facets-stage-rot') || e.target.closest?.('.facets-fig')?.dataset.key === toolsKey) return;
+    if (e.target.closest?.('.facets-stage-tools, .facets-stage-dot, .facets-stage-rot, .facets-stage-size') || e.target.closest?.('.facets-fig')?.dataset.key === toolsKey) return;
     closeTools();
 }
 

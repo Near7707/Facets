@@ -837,7 +837,9 @@ html.facets-open body { overscroll-behavior: none; }
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    width: max-content;
+    /* 0.7.1: a set width. With max-content on a wide (full screen) layer the sliders grew huge. */
+    width: min(300px, calc(100% - 8px));
+    box-sizing: border-box;
     align-items: center;
     gap: 6px;
     padding: 6px;
@@ -873,7 +875,8 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-stage-rotrow input[type="range"] { width: 120px; }
 .facets-stage-ico { padding: 0; width: 36px; }
 .facets-stage-deg { flex: 0 0 auto; min-width: 42px; text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.facets-stage-rot {
+.facets-stage-tools.is-locked { width: max-content; }
+.facets-stage-rot, .facets-stage-size {
     position: absolute;
     width: 34px;
     height: 34px;
@@ -897,6 +900,8 @@ html.facets-open body { overscroll-behavior: none; }
     -webkit-touch-callout: none;
 }
 .facets-stage-rot:active { cursor: grabbing; }
+.facets-stage-size { font-size: 13px; }
+.facets-stage-size i { pointer-events: none; }
 .facets-turnrow { display: flex; align-items: center; gap: 8px; }
 .facets-turnrow > .facets-turnlabel { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .facets-turnrow > .facets-turndeg { flex: 0 0 auto; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
