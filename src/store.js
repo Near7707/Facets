@@ -40,6 +40,8 @@ const DEFAULTS = Object.freeze({
     branchDone: {},
     // "Random each reply": chatKey -> { entityKey: drawerId ('' = all outfits) }
     randoms: {},
+    // Pictures pinned in one chat (0.6.1): chatKey -> { entityKey: Pin[] }
+    pins: {},
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -72,8 +74,16 @@ export function migrate(s) {
     if (typeof s.format !== 'number') s.format = FORMAT;
     // Future format upgrades go here: if (s.format < 2) { ...; s.format = 2; }
     if (!Array.isArray(s.files)) s.files = [];
-    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms']) {
+    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins']) {
         if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
+    }
+    for (const [ck, row] of Object.entries(s.pins)) {
+        if (!row || typeof row !== 'object') { delete s.pins[ck]; continue; }
+        for (const [ek, list] of Object.entries(row)) {
+            const clean = Array.isArray(list) ? list.map(cleanPin).filter(Boolean).slice(0, MAX_PINS) : [];
+            if (clean.length) row[ek] = clean; else delete row[ek];
+        }
+        if (!Object.keys(row).length) delete s.pins[ck];
     }
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
@@ -94,6 +104,13 @@ export function migrate(s) {
             if (typeof d.kw !== 'string') d.kw = '';
         }
         if (e.stage !== undefined) e.stage = cleanStage(e.stage);
+        if (e.layouts !== undefined) {
+            e.layouts = Array.isArray(e.layouts) ? e.layouts.filter(l => l && typeof l.id === 'string').slice(0, MAX_LAYOUTS) : [];
+            for (const l of e.layouts) {
+                l.name = typeof l.name === 'string' ? l.name.slice(0, 40) : '';
+                l.pins = Array.isArray(l.pins) ? l.pins.map(cleanPin).filter(Boolean).slice(0, MAX_PINS) : [];
+            }
+        }
         const drawerIds = new Set(e.drawers.map(d => d.id));
         for (const o of e.outfits) {
             if (o.pair === undefined) o.pair = null;
@@ -151,6 +168,104 @@ export function stageOf(key, create = false) {
         e.stage = cleanStage(null);
     }
     return e.stage;
+}
+
+// ---- Pinned pictures and saved layouts (0.6.1) ----
+// Pin = Stage without "on", plus { id, outfit }. Shown only in the chat it was pinned in.
+// Layout = { id, name, pins: Pin[] } kept per character / persona, to load into another chat.
+
+export const MAX_PINS = 6;
+export const MAX_LAYOUTS = 20;
+
+function cleanPin(p) {
+    if (!p || typeof p !== 'object' || typeof p.outfit !== 'string' || !p.outfit) return null;
+    const st = cleanStage(p);
+    delete st.on;
+    return { id: typeof p.id === 'string' && p.id ? p.id : newId(), outfit: p.outfit, ...st };
+}
+
+/** Pins of one character / persona in one chat (a live array; empty if none). */
+export function pinsOf(chatKey, entityKey) {
+    return settings().pins[chatKey]?.[entityKey] || [];
+}
+
+export function findPin(chatKey, entityKey, pinId) {
+    return pinsOf(chatKey, entityKey).find(p => p.id === pinId) || null;
+}
+
+/** Pin an outfit picture in this chat. Returns the pin, or null when full / not found. */
+export function addPin(chatKey, entityKey, outfitId) {
+    const e = getEntity(entityKey);
+    if (!chatKey || !e?.outfits.some(o => o.id === outfitId)) return null;
+    const s = settings();
+    const row = s.pins[chatKey] || (s.pins[chatKey] = {});
+    const list = row[entityKey] || (row[entityKey] = []);
+    if (list.length >= MAX_PINS) return null;
+    const pin = cleanPin({ outfit: outfitId });
+    list.push(pin);
+    save();
+    return pin;
+}
+
+export function removePin(chatKey, entityKey, pinId) {
+    const s = settings();
+    const row = s.pins[chatKey];
+    if (!row?.[entityKey]) return;
+    row[entityKey] = row[entityKey].filter(p => p.id !== pinId);
+    if (!row[entityKey].length) delete row[entityKey];
+    if (!Object.keys(row).length) delete s.pins[chatKey];
+    save();
+}
+
+export function layoutsOf(entityKey) {
+    return getEntity(entityKey)?.layouts || [];
+}
+
+/** Save this chat's pins as a named layout. Returns the layout, or null. */
+export function saveLayout(entityKey, chatKey, name) {
+    const e = getEntity(entityKey);
+    const pins = pinsOf(chatKey, entityKey);
+    if (!e || !pins.length) return null;
+    if (!Array.isArray(e.layouts)) e.layouts = [];
+    if (e.layouts.length >= MAX_LAYOUTS) return null;
+    const layout = { id: newId(), name: String(name || '').trim().slice(0, 40), pins: structuredClone(pins) };
+    e.layouts.push(layout);
+    save();
+    return layout;
+}
+
+/** Put a saved layout into this chat (replaces the pins already there). Returns how many were placed. */
+export function loadLayout(entityKey, chatKey, layoutId) {
+    const e = getEntity(entityKey);
+    const layout = e?.layouts?.find(l => l.id === layoutId);
+    if (!layout || !chatKey) return 0;
+    const have = new Set(e.outfits.map(o => o.id));
+    const list = layout.pins.filter(p => have.has(p.outfit)).slice(0, MAX_PINS)
+        .map(p => ({ ...structuredClone(p), id: newId() }));
+    const s = settings();
+    if (list.length) {
+        const row = s.pins[chatKey] || (s.pins[chatKey] = {});
+        row[entityKey] = list;
+    } else if (s.pins[chatKey]) {
+        delete s.pins[chatKey][entityKey];
+        if (!Object.keys(s.pins[chatKey]).length) delete s.pins[chatKey];
+    }
+    save();
+    return list.length;
+}
+
+export function renameLayout(entityKey, layoutId, name) {
+    const l = layoutsOf(entityKey).find(x => x.id === layoutId);
+    if (!l) return;
+    l.name = String(name || '').trim().slice(0, 40);
+    save();
+}
+
+export function deleteLayout(entityKey, layoutId) {
+    const e = getEntity(entityKey);
+    if (!e?.layouts) return;
+    e.layouts = e.layouts.filter(l => l.id !== layoutId);
+    save();
 }
 
 /** UI language: the user's own pick, or SillyTavern's language (Korean → ko, anything else → en). */
@@ -282,7 +397,7 @@ export function deleteDrawer(entityKey, drawerId) {
 }
 
 // Tables keyed by chat, each row keyed by entity.
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins'];
 // What a "whole character" change resets (the "random each reply" switch stays on).
 const PICK_TABLES = ['chats', 'timelines', 'tells'];
 
@@ -498,6 +613,14 @@ export function forgetOutfit(entityKey, outfitId) {
     if (!e) return;
     const o = e.outfits.find(x => x.id === outfitId);
     if (o?.pair) unpairOne(o.pair.key, o.pair.id);
+    // Pinned pictures of this outfit go too (in every chat and in saved layouts).
+    for (const [ck, row] of Object.entries(s.pins)) {
+        if (!Array.isArray(row[entityKey])) continue;
+        row[entityKey] = row[entityKey].filter(p => p.outfit !== outfitId);
+        if (!row[entityKey].length) delete row[entityKey];
+        if (!Object.keys(row).length) delete s.pins[ck];
+    }
+    for (const l of e.layouts || []) l.pins = l.pins.filter(p => p.outfit !== outfitId);
     e.outfits = e.outfits.filter(x => x.id !== outfitId);
     if (e.global === outfitId) e.global = null;
     for (const [k, row] of Object.entries(s.chats)) {

@@ -7,6 +7,7 @@ import {
     addDrawer, renameDrawer, deleteDrawer, timelineOf, deletePoint, tellAgain, muteTell,
     setDrawerKeywords, cleanKeywords, randomOf, setRandom, DEFAULT_IGNORE,
     removeEntity, moveEntity, unusedFiles, stageOf, POSES,
+    pinsOf, addPin, removePin, layoutsOf, saveLayout, loadLayout, renameLayout, deleteLayout, MAX_PINS, MAX_LAYOUTS,
 } from './store.js';
 import { resetPlace, screenKind } from './stage.js';
 import { rollDice } from './auto.js';
@@ -425,6 +426,7 @@ function viewStage() {
     if (st.hidden) notes.push(`<div class="facets-stage-state"><span>${esc(t('stage_hidden_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-show"><i class="fa-solid fa-eye"></i><span>${esc(t('stage_show'))}</span></button></div>`);
     if (st.locked) notes.push(`<div class="facets-stage-state"><span>${esc(t('stage_locked_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button></div>`);
     const body = `<div class="facets-stack">
+        <div class="facets-stitle facets-stage-head">${esc(t('stage_main_title'))}</div>
         ${notes.join('')}
         <div class="facets-section">
           <div class="facets-stitle">${esc(t('stage_pose'))}</div>
@@ -434,11 +436,78 @@ function viewStage() {
           ${sw('stage-sticker', st.sticker, t('stage_sticker'), t('stage_sticker_note'))}
           ${sw('stage-flip', st.flip, t('stage_flip'))}
         </div>
-        <div class="facets-note">${esc(t('stage_how'))}</div>
+        <div class="facets-row"><button type="button" class="facets-btn facets-wide" data-act="stage-reset">${esc(t('stage_reset'))}</button></div>
         <div class="facets-note">${esc(t('stage_reset_note', { kind }))}</div>
+        ${pinSection(key)}
+        <div class="facets-note">${esc(t('stage_how'))}</div>
       </div>`;
-    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-wide" data-act="stage-reset">${esc(t('stage_reset'))}</button></div>`;
+    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
     return [head, body, foot];
+}
+
+/** 📌 Pictures pinned in this chat, and saved layouts. Only inside a chat. */
+function pinSection(key) {
+    const title = `<div class="facets-stitle facets-stage-head">${esc(t('pin_title'))}</div>`;
+    if (!chatAvailable()) return `${title}<div class="facets-note">${esc(t('pin_need_chat'))}</div>`;
+    const chatKey = currentScene().chatKey;
+    const e = getEntity(key);
+    const pins = pinsOf(chatKey, key);
+    const full = pins.length >= MAX_PINS;
+    const rows = (e?.outfits || []).map((o, i) => {
+        const pin = pins.find(p => p.outfit === o.id);
+        const name = outfitLabel(o, i);
+        const icon = (act, on, label, cls) => `<button type="button" class="facets-iconbtn facets-pin-opt${on ? ' on' : ''}" data-act="${act}" data-pin="${esc(pin.id)}" aria-pressed="${on}" title="${esc(label)}" aria-label="${esc(label)}"><i class="fa-solid ${cls}"></i></button>`;
+        const tail = pin
+            ? `${icon('pin-sticker', pin.sticker, t('stage_sticker'), 'fa-circle-notch')}${icon('pin-flip', pin.flip, t('stage_flip'), 'fa-arrows-left-right')}
+               <button type="button" class="facets-btn facets-small" data-act="pin-remove" data-pin="${esc(pin.id)}">${esc(t('stage_remove'))}</button>`
+            : `<button type="button" class="facets-btn facets-small" data-act="pin-add" data-id="${esc(o.id)}"${full ? ' disabled' : ''}>${esc(t('pin_add'))}</button>`;
+        return `<div class="facets-hist-row facets-pin-row${pin ? ' is-pinned' : ''}">
+            <div class="facets-hist-thumb"><img src="${esc(urlOf(o.sq || o.orig))}" alt="" loading="lazy" draggable="false"></div>
+            <div class="facets-hist-text">
+              <div class="facets-hist-name" title="${esc(name)}">${esc(name)}</div>
+              ${pin ? `<div class="facets-hist-time">${esc(t('pin_here'))}</div>` : ''}
+            </div>
+            ${tail}
+          </div>`;
+    }).join('');
+    const layouts = layoutsOf(key);
+    const lrows = layouts.map((l, i) => `<div class="facets-drawer-row facets-layout-row">
+        <input type="text" class="facets-input" data-layout-name="${esc(l.id)}" maxlength="40" value="${esc(l.name)}" placeholder="${esc(t('layout_n', { n: i + 1 }))}" aria-label="${esc(t('layout_name'))}" autocomplete="off">
+        <span class="facets-drawer-count">${esc(t('layout_count', { n: l.pins.length }))}</span>
+        <button type="button" class="facets-btn facets-small" data-act="layout-load" data-id="${esc(l.id)}">${esc(t('layout_load'))}</button>
+        <button type="button" class="facets-iconbtn facets-danger-icon" data-act="layout-delete" data-id="${esc(l.id)}" title="${esc(t('layout_delete'))}" aria-label="${esc(t('layout_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
+      </div>`).join('');
+    const canSave = pins.length > 0 && layouts.length < MAX_LAYOUTS;
+    return `${title}
+      <div class="facets-note">${esc(t('pin_note', { n: pins.length, max: MAX_PINS }))}</div>
+      ${rows || `<div class="facets-note">${esc(t('pin_no_outfits'))}</div>`}
+      <div class="facets-stitle facets-stage-head">${esc(t('layout_title'))}</div>
+      <div class="facets-drawer-row">
+        <input type="text" class="facets-input facets-layout-new" maxlength="40" placeholder="${esc(t('layout_new_ph'))}" aria-label="${esc(t('layout_new_ph'))}" autocomplete="off"${canSave ? '' : ' disabled'}>
+        <button type="button" class="facets-btn facets-small" data-act="layout-save"${canSave ? '' : ' disabled'}>${esc(t('layout_save'))}</button>
+      </div>
+      ${lrows}
+      <div class="facets-note">${esc(t(pins.length ? 'layout_note' : 'layout_note_empty'))}</div>`;
+}
+
+function saveLayoutFromInput() {
+    const key = activeKey();
+    const input = root.querySelector('.facets-layout-new');
+    if (!key || !input || !chatAvailable()) return;
+    const l = saveLayout(key, currentScene().chatKey, input.value);
+    if (l) toast('success', t('layout_saved'));
+    render();
+}
+
+async function loadLayoutHere(id) {
+    const key = activeKey();
+    if (!key || !chatAvailable()) return;
+    const chatKey = currentScene().chatKey;
+    if (pinsOf(chatKey, key).length && !(await confirmBox(t('confirm_layout_load'), t('layout_load')))) return;
+    const n = loadLayout(key, chatKey, id);
+    applyAllSoon();
+    toast(n ? 'success' : 'warning', n ? t('layout_loaded', { n }) : t('layout_empty'));
+    render();
 }
 
 /** One line under "Tell the AI": is the look being sent right now, and why not. */
@@ -1404,6 +1473,39 @@ function onClick(e) {
             if (st) { if (act === 'stage-show') st.hidden = false; else st.locked = false; save(); applyAllSoon(); }
             render(); break;
         }
+        case 'pin-add': {
+            const key = activeKey();
+            if (key && chatAvailable()) {
+                if (!addPin(currentScene().chatKey, key, el.dataset.id)) toast('warning', t('pin_full', { max: MAX_PINS }));
+                applyAllSoon();
+            }
+            render(); break;
+        }
+        case 'pin-remove': case 'pin-sticker': case 'pin-flip': {
+            const key = activeKey();
+            if (key && chatAvailable()) {
+                const chatKey = currentScene().chatKey;
+                if (act === 'pin-remove') removePin(chatKey, key, el.dataset.pin);
+                else {
+                    const pin = pinsOf(chatKey, key).find(p => p.id === el.dataset.pin);
+                    if (pin) { if (act === 'pin-sticker') pin.sticker = !pin.sticker; else pin.flip = !pin.flip; save(); }
+                }
+                applyAllSoon();
+            }
+            render(); break;
+        }
+        case 'layout-save': saveLayoutFromInput(); break;
+        case 'layout-load': loadLayoutHere(el.dataset.id); break;
+        case 'layout-delete': {
+            const key = activeKey();
+            const l = layoutsOf(key).find(x => x.id === el.dataset.id);
+            if (l) {
+                const i = layoutsOf(key).indexOf(l);
+                confirmBox(t('confirm_layout_delete', { name: l.name || t('layout_n', { n: i + 1 }) }), t('delete'))
+                    .then(ok => { if (ok) { deleteLayout(key, l.id); render(); } });
+            }
+            break;
+        }
         case 'stage-reset': {
             const key = activeKey();
             if (key) { resetPlace(key); applyAllSoon(); toast('success', t('stage_reset_done')); }
@@ -1529,6 +1631,10 @@ function onChange(e) {
         render();
         return;
     }
+    if (el.dataset.layoutName) {
+        renameLayout(activeKey(), el.dataset.layoutName, el.value);
+        return;
+    }
     if (el.dataset.drawerName) {
         renameDrawer(activeKey(), el.dataset.drawerName, el.value);
         save();
@@ -1580,6 +1686,8 @@ document.addEventListener('keydown', (e) => {
     if (!state.open || (e.key !== 'Enter' && e.key !== ' ')) return;
     const el = e.target;
     if (e.key === 'Enter' && el?.classList?.contains('facets-drawer-new')) { e.preventDefault(); addDrawerFromInput(); return; }
+    if (e.key === 'Enter' && el?.classList?.contains('facets-layout-new')) { e.preventDefault(); saveLayoutFromInput(); return; }
+    if (e.key === 'Enter' && el?.dataset?.layoutName) { e.preventDefault(); el.blur(); return; }
     if (e.key === 'Enter' && (el?.dataset?.drawerName || el?.dataset?.drawerKw)) { e.preventDefault(); el.blur(); return; }
     if (!root?.contains(el) || el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return;
     if (el.getAttribute('role') === 'button') { e.preventDefault(); el.click(); }

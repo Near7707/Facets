@@ -854,6 +854,9 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-stage-tools {
     position: absolute;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: max-content;
     align-items: center;
     gap: 6px;
     padding: 6px;
@@ -880,6 +883,16 @@ html.facets-open body { overscroll-behavior: none; }
     white-space: nowrap;
     flex: 0 0 auto;
 }
-.facets-stage-op { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; flex: 1 1 auto; min-width: 0; }
+.facets-stage-op { display: flex; align-items: center; gap: 6px; padding: 0 4px; flex: 1 0 100%; min-width: 0; }
+.facets-stage-op input[type="range"] { flex: 1 1 auto; }
 .facets-stage-op input[type="range"] { width: 96px; min-width: 60px; height: 32px; margin: 0; accent-color: var(--facets-accent); }
-@media (max-width: 380px) { .facets-stage-btn > span { display: none; } }
+@media (max-width: 360px) { .facets-stage-btn > span { display: none; } }
+
+/* 0.6.1 pinned pictures and layouts */
+.facets-root .facets-stage-head { margin-top: 6px; font-size: 14px; color: var(--facets-text); }
+.facets-pin-row { gap: 6px; }
+.facets-pin-row > .facets-btn { flex: 0 0 auto; }
+.facets-root .facets-pin-opt { flex: 0 0 auto; opacity: 0.55; }
+.facets-root .facets-pin-opt.on { opacity: 1; color: var(--facets-accent); border-color: var(--facets-accent); }
+.facets-pin-row.is-pinned { border-color: var(--facets-accent); }
+.facets-layout-row .facets-drawer-count { flex: 0 0 auto; white-space: nowrap; }

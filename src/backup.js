@@ -5,7 +5,7 @@ import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx } from './store.
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
 const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide'];
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms'];
+const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins'];
 
 export async function exportBackup(toast) {
     const s = settings();
@@ -20,6 +20,7 @@ export async function exportBackup(toast) {
         tells: structuredClone(s.tells),
         branchDone: structuredClone(s.branchDone),
         randoms: structuredClone(s.randoms),
+        pins: structuredClone(s.pins),
         images: null,
     };
     if (s.backupImages) {

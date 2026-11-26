@@ -1,4 +1,5 @@
 // "In the chat" pictures (0.6.0): the current outfit placed at the edge of the chat area.
+// 0.6.1: pinned pictures — chosen outfit pictures placed in one chat only. Each picture is a "piece".
 // Only our own elements are added (one layer inside #sheld); SillyTavern's elements are never changed.
 // Unlocked: drag to move, pinch / mouse wheel to resize, tap for a small tool bar.
 // Locked: touches pass through the picture; only a small 🔒 dot stays clickable.
@@ -6,13 +7,16 @@
 import { t } from './i18n.js';
 import {
     settings, save, stageOf, effectiveOutfit, isCharKey, avatarOfKey, SIZE_MIN, SIZE_MAX, OPACITY_MIN,
+    pinsOf, getEntity, removePin, POSES,
 } from './store.js';
 import { urlOf } from './images.js';
 import { currentScene, onApply } from './apply.js';
 import { syncTheme } from './theme.js';
 
 let layer = null;
-const figures = new Map(); // entity key -> { fig, img, dot, handle, src, ar }
+const figures = new Map(); // piece id -> { fig, img, dot, handle, src, ar }
+// Piece id: the entity key for the "current outfit" picture, "<entity key>\n<pin id>" for a pinned one.
+const pieces = new Map(); // piece id -> { ek, pinId, chatKey, index }
 let toolsKey = ''; // whose tool bar is open
 let gesture = null;
 const pointers = new Map();
@@ -25,17 +29,39 @@ export function screenKind() {
     return window.innerWidth <= 1000 ? 'narrow' : 'wide';
 }
 
-function defaultPlace(key) {
+/** Settings of one piece: the entity's stage, or the pin. */
+function stOf(pid) {
+    const pc = pieces.get(pid);
+    if (!pc) return null;
+    if (!pc.pinId) return stageOf(pc.ek);
+    return pinsOf(pc.chatKey, pc.ek).find(p => p.id === pc.pinId) || null;
+}
+
+function outfitOf(pid) {
+    const pc = pieces.get(pid);
+    if (!pc) return null;
+    if (!pc.pinId) return effectiveOutfit(pc.ek, pc.chatKey);
+    const pin = stOf(pid);
+    return getEntity(pc.ek)?.outfits.find(o => o.id === pin?.outfit) || null;
+}
+
+const PIN_X = [0.5, 0.35, 0.65, 0.2, 0.8, 0.5];
+
+function defaultPlace(pid) {
+    const pc = pieces.get(pid);
+    const size = screenKind() === 'narrow' ? 0.45 : 0.55;
+    // Pinned pictures start in the middle, spread a little, and a bit smaller.
+    if (pc?.pinId) return { x: PIN_X[pc.index % PIN_X.length], y: 0.5, size: size * 0.8 };
     // Character on the right, persona on the left, so the two never start on top of each other.
-    return { x: isCharKey(key) ? 0.8 : 0.2, y: 0.5, size: screenKind() === 'narrow' ? 0.45 : 0.55 };
+    return { x: isCharKey(pc?.ek || pid) ? 0.8 : 0.2, y: 0.5, size };
 }
 
 function placeNow(key) {
-    return stageOf(key)?.place?.[screenKind()] || defaultPlace(key);
+    return stOf(key)?.place?.[screenKind()] || defaultPlace(key);
 }
 
 function setPlace(key, p) {
-    const st = stageOf(key);
+    const st = stOf(key);
     if (!st) return;
     st.place[screenKind()] = {
         x: clamp(p.x, 0, 1), y: clamp(p.y, 0, 1), size: clamp(p.size, SIZE_MIN, SIZE_MAX),
@@ -125,11 +151,28 @@ function keyboardOpen() {
 
 // ---------- drawing ----------
 
-/** Who is shown now: the open character and persona with "in the chat" on, in a one-on-one chat. */
+/**
+ * What is shown now, in a one-on-one chat: the open character's and persona's "current outfit" picture
+ * (if turned on) and the pictures pinned in this chat.
+ */
 function shownKeys() {
+    pieces.clear();
     const sc = currentScene();
     if (!settings().showStage || sc.inGroup || !sc.chatKey) return [];
-    return [sc.charKey, sc.personaKey].filter(k => k && stageOf(k)?.on);
+    const out = [];
+    for (const ek of [sc.charKey, sc.personaKey]) {
+        if (!ek) continue;
+        if (stageOf(ek)?.on) {
+            pieces.set(ek, { ek, pinId: '', chatKey: sc.chatKey, index: 0 });
+            out.push(ek);
+        }
+        pinsOf(sc.chatKey, ek).forEach((pin, index) => {
+            const pid = `${ek}\n${pin.id}`;
+            pieces.set(pid, { ek, pinId: pin.id, chatKey: sc.chatKey, index });
+            out.push(pid);
+        });
+    }
+    return out;
 }
 
 export function applyStage() {
@@ -216,18 +259,19 @@ function boxOf(key, st, f, W, H) {
 }
 
 function drawOne(key) {
-    if (!layer) return;
-    const st = stageOf(key);
+    if (!layer || !pieces.has(key)) return;
+    const st = stOf(key);
     if (!st) return;
+    const pc = pieces.get(key);
+    const outfit = outfitOf(key);
+    if (pc.pinId && !outfit) return; // the outfit was deleted
     const f = entryFor(key);
-    const sc = currentScene();
-    const outfit = effectiveOutfit(key, sc.chatKey);
-    const src = pictureUrl(key, outfit);
+    const src = pictureUrl(pc.ek, outfit);
     if (f.src !== src) {
         f.src = src;
         f.ar = 0;
         f.img.src = src;
-        f.handle.querySelector('img').src = thumbUrl(key, outfit);
+        f.handle.querySelector('img').src = thumbUrl(pc.ek, outfit);
     }
     const W = layer.clientWidth, H = layer.clientHeight;
     const b = boxOf(key, st, f, W, H);
@@ -271,7 +315,7 @@ function closeTools() {
 }
 
 function openTools(key) {
-    const st = stageOf(key);
+    const st = stOf(key);
     if (!st || !layer) return;
     closeTools();
     toolsKey = key;
@@ -285,7 +329,9 @@ function openTools(key) {
         : `<label class="facets-stage-op" title="${esc(t('stage_opacity'))}"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
              <input type="range" min="${Math.round(OPACITY_MIN * 100)}" max="100" step="1" value="${Math.round(st.opacity * 100)}" data-stage-act="opacity" aria-label="${esc(t('stage_opacity'))}"></label>
            <button type="button" class="facets-stage-btn" data-stage-act="lock"><i class="fa-solid fa-lock"></i><span>${esc(t('stage_lock'))}</span></button>
-           <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-eye-slash"></i><span>${esc(t('stage_hide'))}</span></button>`;
+           <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-eye-slash"></i><span>${esc(t('stage_hide'))}</span></button>
+           <button type="button" class="facets-stage-btn" data-stage-act="pose" title="${esc(t('stage_pose_next'))}"><i class="fa-solid fa-person"></i><span>${esc(t('stage_pose'))}</span></button>
+           <button type="button" class="facets-stage-btn" data-stage-act="remove" title="${esc(t(pieces.get(key)?.pinId ? 'stage_remove_pin' : 'stage_remove_main'))}"><i class="fa-solid fa-xmark"></i><span>${esc(t('stage_remove'))}</span></button>`;
     layer.appendChild(bar);
     placeTools();
 }
@@ -319,7 +365,7 @@ function onDown(e) {
     const fig = e.target.closest('.facets-fig');
     if (!fig) return;
     const key = fig.dataset.key;
-    const st = stageOf(key);
+    const st = stOf(key);
     if (!st || st.locked) return;
     if (e.button !== undefined && e.button > 0) return;
     e.preventDefault();
@@ -375,7 +421,7 @@ function onWheel(e) {
     const fig = e.target.closest('.facets-fig');
     if (!fig) return;
     const key = fig.dataset.key;
-    const st = stageOf(key);
+    const st = stOf(key);
     if (!st || st.locked) return;
     e.preventDefault();
     const p = placeNow(key);
@@ -388,7 +434,7 @@ function onClick(e) {
     const el = e.target.closest('[data-stage-act]');
     if (!el || el.tagName === 'INPUT') return;
     const key = el.dataset.key || toolsEl()?.dataset.key || '';
-    const st = stageOf(key);
+    const st = stOf(key);
     if (!st) return;
     switch (el.dataset.stageAct) {
         case 'tools': toggleTools(key); return;
@@ -396,6 +442,23 @@ function onClick(e) {
         case 'unlock': st.locked = false; break;
         case 'hide': st.hidden = true; break;
         case 'show': st.hidden = false; break;
+        case 'pose': {
+            st.pose = POSES[(POSES.indexOf(st.pose) + 1) % POSES.length];
+            save();
+            drawOne(key);
+            if (toolsKey === key) placeTools(); // keep the bar open to try the next pose
+            document.dispatchEvent(new CustomEvent('facets:stage'));
+            return;
+        }
+        case 'remove': {
+            const pc = pieces.get(key);
+            closeTools();
+            if (pc?.pinId) removePin(pc.chatKey, pc.ek, pc.pinId);
+            else { st.on = false; save(); }
+            applyStage();
+            document.dispatchEvent(new CustomEvent('facets:stage'));
+            return;
+        }
         default: return;
     }
     save();
@@ -407,7 +470,7 @@ function onClick(e) {
 function onInput(e) {
     const el = e.target;
     if (el.dataset.stageAct !== 'opacity') return;
-    const st = stageOf(toolsKey);
+    const st = stOf(toolsKey);
     if (!st) return;
     st.opacity = clamp(Number(el.value) / 100, OPACITY_MIN, 1);
     const f = figures.get(toolsKey);
