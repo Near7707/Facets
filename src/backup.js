@@ -4,7 +4,7 @@ import { t } from './i18n.js';
 import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
-const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords'];
+const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide'];
 const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms'];
 
 export async function exportBackup(toast) {

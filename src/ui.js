@@ -6,8 +6,9 @@ import {
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
     addDrawer, renameDrawer, deleteDrawer, timelineOf, deletePoint, tellAgain, muteTell,
     setDrawerKeywords, cleanKeywords, randomOf, setRandom, DEFAULT_IGNORE,
-    removeEntity, moveEntity, unusedFiles,
+    removeEntity, moveEntity, unusedFiles, stageOf, POSES,
 } from './store.js';
+import { resetPlace, screenKind } from './stage.js';
 import { rollDice } from './auto.js';
 import {
     urlOf, folderFor, readAsDataURL, loadImage, uploadDataURL, deletePath, autoCrop, renderCrop,
@@ -23,7 +24,7 @@ export function setVersion(v) { VERSION = v; }
 
 const state = {
     open: false,
-    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers | history | leftovers | move
+    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers | history | leftovers | move | stage
     tab: 'char',
     drawer: '', // drawer tab shown in the wardrobe ('' = all)
     fromSettings: false,
@@ -229,7 +230,7 @@ function back() {
         case 'history': state.screen = 'wardrobe'; state.histMore = false; break;
         case 'leftovers': state.screen = 'wardrobe'; break;
         case 'move': state.screen = 'leftovers'; state.moveFrom = ''; break;
-        case 'settings': case 'organize': state.screen = 'wardrobe'; break;
+        case 'settings': case 'organize': case 'stage': state.screen = 'wardrobe'; break;
         default: closeWardrobe(); return;
     }
     render();
@@ -253,6 +254,7 @@ function render() {
         case 'history': [head, body, foot] = viewHistory(); break;
         case 'leftovers': [head, body, foot] = viewLeftovers(); break;
         case 'move': [head, body, foot] = viewMove(); break;
+        case 'stage': [head, body, foot] = viewStage(); break;
     }
     const lang = getLanguage();
     root.innerHTML = `
@@ -343,6 +345,7 @@ function viewWardrobe() {
     let body = `${state.fromSettings ? leftoverBar() : ''}<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
         <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
         ${chatKey && e.outfits.length ? randomRow(e, key, chatKey) : ''}
+        ${stageRow(key)}
         ${drawerChips(e, drawer)}
         <div class="facets-grid">${tiles.join('')}</div>`;
     if (e.outfits.length && drawer && !visible.length) {
@@ -382,6 +385,60 @@ function randomRow(e, key, chatKey) {
         <input type="checkbox" data-act="random"${on ? ' checked' : ''}>
         <span class="facets-switch" aria-hidden="true"></span>
       </label></div>`;
+}
+
+/** "In the chat" switch for this character / persona (all chats), and the button to its style screen. */
+function stageRow(key) {
+    const st = stageOf(key);
+    const on = !!st?.on;
+    const note = !settings().showStage ? t('stage_note_master') : on ? t('stage_note_on') : t('stage_note_off');
+    return `<div class="facets-aibar facets-stagebar"><div class="facets-stagerow">
+        <label class="facets-toggle">
+          <span class="facets-toggle-text"><span>${esc(t('stage_label'))}</span><small>${esc(note)}</small></span>
+          <input type="checkbox" data-act="stage-on"${on ? ' checked' : ''}>
+          <span class="facets-switch" aria-hidden="true"></span>
+        </label>
+        <button type="button" class="facets-btn facets-small" data-act="stage" title="${esc(t('stage_edit'))}"><i class="fa-solid fa-sliders"></i><span>${esc(t('stage_edit'))}</span></button>
+      </div></div>`;
+}
+
+const POSE_ICON = { stand: 'fa-person', peek: 'fa-eye', pop: 'fa-arrow-up', lean: 'fa-grip-lines-vertical' };
+
+function viewStage() {
+    const key = activeKey();
+    if (!key) { state.screen = 'wardrobe'; return viewWardrobe(); }
+    entityFor(key);
+    const st = stageOf(key, true);
+    const head = headTitle(`${t('stage_title')} · ${displayName(key)}`);
+    const poses = POSES.map(p => `<button type="button" role="radio" class="facets-pose${st.pose === p ? ' on' : ''}" data-act="stage-pose" data-pose="${p}" aria-checked="${st.pose === p}">
+        <i class="fa-solid ${POSE_ICON[p]}" aria-hidden="true"></i>
+        <span class="facets-pose-text"><b>${esc(t(`pose_${p}`))}</b><small>${esc(t(`pose_${p}_note`))}</small></span>
+      </button>`).join('');
+    const sw = (act, on, label, note = '') => `<label class="facets-toggle">
+        <span class="facets-toggle-text"><span>${esc(label)}</span>${note ? `<small>${esc(note)}</small>` : ''}</span>
+        <input type="checkbox" data-act="${act}"${on ? ' checked' : ''}>
+        <span class="facets-switch" aria-hidden="true"></span>
+      </label>`;
+    const kind = t(screenKind() === 'narrow' ? 'stage_kind_narrow' : 'stage_kind_wide');
+    const notes = [];
+    if (!st.on) notes.push(`<div class="facets-note">${esc(t('stage_off_note'))}</div>`);
+    if (st.hidden) notes.push(`<div class="facets-stage-state"><span>${esc(t('stage_hidden_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-show"><i class="fa-solid fa-eye"></i><span>${esc(t('stage_show'))}</span></button></div>`);
+    if (st.locked) notes.push(`<div class="facets-stage-state"><span>${esc(t('stage_locked_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button></div>`);
+    const body = `<div class="facets-stack">
+        ${notes.join('')}
+        <div class="facets-section">
+          <div class="facets-stitle">${esc(t('stage_pose'))}</div>
+          <div class="facets-poses" role="radiogroup">${poses}</div>
+        </div>
+        <div class="facets-section">
+          ${sw('stage-sticker', st.sticker, t('stage_sticker'), t('stage_sticker_note'))}
+          ${sw('stage-flip', st.flip, t('stage_flip'))}
+        </div>
+        <div class="facets-note">${esc(t('stage_how'))}</div>
+        <div class="facets-note">${esc(t('stage_reset_note', { kind }))}</div>
+      </div>`;
+    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-wide" data-act="stage-reset">${esc(t('stage_reset'))}</button></div>`;
+    return [head, body, foot];
 }
 
 /** One line under "Tell the AI": is the look being sent right now, and why not. */
@@ -795,6 +852,8 @@ function viewSettings() {
           <div class="facets-stitle">${esc(t('show_where'))}</div>
           ${toggleRow('showInChat', t('show_chat'))}
           ${toggleRow('showInList', t('show_list'))}
+          ${toggleRow('showStage', t('show_stage'), t('show_stage_note'))}
+          ${toggleRow('stageKbHide', t('stage_kb_hide'))}
         </div>
         <div class="facets-section">
           ${toggleRow('tellAI', t('tell_ai'), t('tell_ai_note'))}
@@ -1334,6 +1393,22 @@ function onClick(e) {
             render(); break;
         }
         case 'settings': state.screen = 'settings'; render(); break;
+        case 'stage': state.screen = 'stage'; render(); break;
+        case 'stage-pose': {
+            const st = stageOf(activeKey(), true);
+            if (st && POSES.includes(el.dataset.pose)) { st.pose = el.dataset.pose; save(); applyAllSoon(); }
+            render(); break;
+        }
+        case 'stage-show': case 'stage-unlock': {
+            const st = stageOf(activeKey());
+            if (st) { if (act === 'stage-show') st.hidden = false; else st.locked = false; save(); applyAllSoon(); }
+            render(); break;
+        }
+        case 'stage-reset': {
+            const key = activeKey();
+            if (key) { resetPlace(key); applyAllSoon(); toast('success', t('stage_reset_done')); }
+            break;
+        }
         case 'scope': state.scope = el.dataset.scope; render(); break;
         case 'wear': wear(el.dataset.id); break;
         case 'wear-default': wear(null); toast('success', t('reverted')); break;
@@ -1431,6 +1506,21 @@ function onChange(e) {
         save();
         return;
     }
+    if (act === 'stage-on' || act === 'stage-sticker' || act === 'stage-flip') {
+        const key = activeKey();
+        if (!key) return;
+        entityFor(key);
+        const st = stageOf(key, true);
+        if (act === 'stage-on') {
+            st.on = el.checked;
+            if (st.on) st.hidden = false; // turning it on always shows it
+        } else if (act === 'stage-sticker') st.sticker = el.checked;
+        else st.flip = el.checked;
+        save();
+        applyAllSoon();
+        render();
+        return;
+    }
     if (act === 'random') {
         const key = activeKey();
         const e = key && getEntity(key);
@@ -1496,6 +1586,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 attachCropGestures();
+document.addEventListener('facets:stage', () => { if (state.open && !state.busy && state.screen === 'stage') render(); });
 
 export function _stateForTest() { return state; }
 export { currentPersonaAvatar };

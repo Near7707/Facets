@@ -21,6 +21,11 @@
   #rm_print_characters_block .avatar img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
   #extensionsMenu { display: flex; flex-direction: column; border: 1px solid #888; width: 220px; margin: 8px; }
   #extensions_settings2 { max-width: 420px; margin: 8px; }
+  #sheld { position: relative; max-width: 760px; margin: 0 auto; border: 1px dashed #888; }
+  #sheld #chat { min-height: 420px; }
+  #form_sheld { padding: 6px; border-top: 1px solid #888; }
+  #send_form { display: flex; gap: 6px; }
+  #send_textarea { flex: 1 1 auto; font-size: 16px; min-height: 36px; }
   #prompt_out { white-space: pre-wrap; font-family: monospace; margin: 8px; padding: 6px; border: 1px dashed #888; min-height: 2em; }
 </style>
 <style id="theme_override"></style>
@@ -38,7 +43,10 @@
 </div>
 <div id="extensionsMenu"></div>
 <div id="rm_print_characters_block"></div>
-<div id="chat"></div>
+<div id="sheld">
+  <div id="chat"></div>
+  <div id="form_sheld"><div id="send_form"><textarea id="send_textarea" rows="1" placeholder="Type a message"></textarea><button id="send_but">Send</button></div></div>
+</div>
 <div id="prompt_out"></div>
 <div id="extensions_settings2"></div>
 <div id="user_avatar_block"></div>

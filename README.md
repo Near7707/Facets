@@ -20,6 +20,7 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 - **Change words (automatic).** Give an outfit words like "suit, tie". When an AI reply uses one, the look changes from that reply on (older messages keep their outfit). Words on a drawer pick a random outfit inside it (nothing changes if one from that drawer is already worn). English matches whole words ("suit" does not match "suitcase"); Korean matches inside words, so particles are fine. A word right next to "take off", "without", "벗", "대신" and the like is ignored (the list can be edited in ⚙). A short notice appears; tap it to undo. A swipe or regenerate checks the new reply again.
 - **Random.** 🎲 picks a random outfit from the open drawer tab, from now on in this chat. *Random each reply* does it for every new AI reply in this chat (a swipe picks again, so the history does not pile up).
 - Automatic changes change the picture only (the AI is not told) and, by default, do not change the matching-set partner (a switch in ⚙ turns that on). Each chat keeps the last 200 changes per character/persona.
+- **In the chat.** Turn on *🧍 In the chat* in the wardrobe to place the picture of the current outfit at the edge of the chat area (character and persona; it follows outfit changes). Poses: *Behind the input box*, *Peeking from the wall*, *Peeking up*, *Leaning*. A transparent-background full-body picture works best; *Sticker* (round cut, white border) suits pictures with a background. In the chat, drag the picture to move it, pinch it (PC: mouse wheel) to resize, and tap it for opacity, 🔒 *Lock* and *Hide*. A locked picture lets touches through to the chat; a hidden one leaves a small tab at the edge. Phones and PCs keep their own place and size. Off for every character until you turn it on; ⚙ can turn all of them off and hide them while the phone keyboard is open.
 - **Tell the AI.** Each outfit has a *look description* (e.g. "black suit, hair slicked back"). When you change into an outfit with a different description (picked with *This chat only*), it is sent through SillyTavern's extension prompt for the next few AI replies (1 / 3 / 5 / every time, in ⚙). The wardrobe shows whether it is being sent; use *Not this time* if you only changed the picture, or *Tell again* if the AI seems to forget. Empty description = picture only. A *Whole character* pick changes the picture only. Off by default.
 - **Where it shows:** chat message avatars, and the character list, character info page and welcome-screen recent chats (each group can be turned off). Only what is shown on screen changes; the card's own avatar is never replaced.
 - **Backup and import** to move to another device (picture files can be included).
@@ -36,7 +37,7 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 
 - **Wand menu → Facets.** In a one-on-one chat it opens for that chat; anywhere else it opens with character/persona pickers (whole-character looks only). **Extensions → Facets → Open Wardrobe** does the same.
 - **Add** (bottom of the wardrobe, or in Organize) → crop each picture (or *Skip*). Going back or closing keeps the remaining pictures with the automatic crop. In **Organize**, drag the handle to reorder, tap 🗑 to delete an outfit, or tap the outfit to edit its name, look description, drawers, crop and matching set. The **Drawers** button makes, renames and deletes drawers (deleting a drawer keeps its outfits).
-- ⚙ inside the wardrobe: where to show, *Tell the AI*, language, backup, delete all data, version.
+- ⚙ inside the wardrobe: where to show (including *In the chat*), *Tell the AI*, language, backup, delete all data, version.
 
 **Tip — avatar shape.** SillyTavern's chat avatars are small. In **User Settings → Theme → Avatars**, *Square* or *Rounded* shows more of the picture than *Circle*. With *Rectangle*, Facets crops tall (2:3). If you change the avatar shape later, pictures cropped for the old shape may be cut a little — just crop those outfits again.
 
@@ -50,9 +51,10 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 ## Known limits
 
 - Exporting a character card does not carry its outfits. Use Facets' backup to move them.
-- Group chats are not supported yet.
+- Group chats are not supported yet (also no *In the chat* pictures there).
 - *Whole character* replaces the per-chat choices and change histories of that character in every chat.
 - Very old messages without a send time show the current outfit.
+- *In the chat* pictures sit above the messages (not behind the text). Lower the opacity, or lock the picture so touches pass through.
 - Deleting a character deletes its outfit pictures, but the empty `Facets_<character>` folder stays (SillyTavern only lets extensions delete files). Delete the folder yourself if you like.
 
 ## Testing without SillyTavern

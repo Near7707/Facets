@@ -24,7 +24,9 @@ const DEFAULTS = Object.freeze({
     autoKeywords: true, // change outfits when an AI reply uses their words
     autoPair: false, // automatic changes also change the matching-set partner
     ignoreWords: DEFAULT_IGNORE,
-    // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null }
+    showStage: true, // "In the chat" pictures (each character / persona still starts off)
+    stageKbHide: true, // hide them while a phone keyboard is open
+    // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null, stage?: Stage }
     // key is "char:<avatar file>" or "persona:<avatar file>"
     entities: {},
     // "<character avatar>::<chat file name>" -> { entityKey: outfitId | DEFAULT_MARK }
@@ -91,6 +93,7 @@ export function migrate(s) {
             if (typeof d.name !== 'string') d.name = '';
             if (typeof d.kw !== 'string') d.kw = '';
         }
+        if (e.stage !== undefined) e.stage = cleanStage(e.stage);
         const drawerIds = new Set(e.drawers.map(d => d.id));
         for (const o of e.outfits) {
             if (o.pair === undefined) o.pair = null;
@@ -102,6 +105,52 @@ export function migrate(s) {
         }
     }
     return s;
+}
+
+// ---- "In the chat" pictures (0.6.0) ----
+// Stage = { on, pose, sticker, flip, opacity, locked, hidden, place: { narrow?: Place, wide?: Place } }
+// Place = { x, y, size } as parts of the chat area (0..1). Phones and PCs keep their own place.
+
+export const POSES = ['stand', 'peek', 'pop', 'lean'];
+export const SIZE_MIN = 0.2;
+export const SIZE_MAX = 0.8;
+export const OPACITY_MIN = 0.3;
+
+const clamp = (v, lo, hi, d) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+
+function cleanPlace(p) {
+    if (!p || typeof p !== 'object') return undefined;
+    return { x: clamp(p.x, 0, 1, 0.5), y: clamp(p.y, 0, 1, 0.5), size: clamp(p.size, SIZE_MIN, SIZE_MAX, 0.45) };
+}
+
+export function cleanStage(st) {
+    const s = st && typeof st === 'object' ? st : {};
+    const place = {};
+    for (const k of ['narrow', 'wide']) {
+        const p = cleanPlace(s.place?.[k]);
+        if (p) place[k] = p;
+    }
+    return {
+        on: s.on === true,
+        pose: POSES.includes(s.pose) ? s.pose : 'stand',
+        sticker: s.sticker === true,
+        flip: s.flip === true,
+        opacity: clamp(s.opacity, OPACITY_MIN, 1, 1),
+        locked: s.locked === true,
+        hidden: s.hidden === true,
+        place,
+    };
+}
+
+/** The "in the chat" settings of one character / persona (null if none and not created). */
+export function stageOf(key, create = false) {
+    const e = getEntity(key, create);
+    if (!e) return null;
+    if (!e.stage) {
+        if (!create) return null;
+        e.stage = cleanStage(null);
+    }
+    return e.stage;
 }
 
 /** UI language: the user's own pick, or SillyTavern's language (Korean → ko, anything else → en). */

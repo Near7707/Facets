@@ -243,12 +243,19 @@ export function restoreEverything() {
     document.querySelectorAll('img.facets-avatar').forEach(restoreImg);
 }
 
+// Other parts (the "in the chat" pictures) that redraw with the avatars.
+const extraAppliers = [];
+export function onApply(fn) { extraAppliers.push(fn); }
+
 let raf = 0;
 export function applyAllSoon() {
     if (raf) return;
     raf = requestAnimationFrame(() => {
         raf = 0;
         try { applyChat(); applyList(); applyRecent(); applyPreview(); updatePrompt(); } catch (e) { console.error('[Facets]', e); }
+        for (const fn of extraAppliers) {
+            try { fn(); } catch (e) { console.error('[Facets]', e); }
+        }
     });
 }
 

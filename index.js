@@ -14,8 +14,9 @@ import {
 } from './src/apply.js';
 import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender, notifyAuto } from './src/ui.js';
 import { onReply } from './src/auto.js';
+import { initStage } from './src/stage.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 setVersion(VERSION);
 
 function langOptions() {
@@ -190,6 +191,7 @@ async function init() {
     mountWand();
     registerEvents();
     registerZoomFix();
+    initStage();
     startObservers();
     applyAllSoon();
     document.addEventListener('facets:lang', () => { mountSettingsPanel(); mountWand(); });
