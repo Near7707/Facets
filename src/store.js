@@ -585,3 +585,61 @@ export function removeEntity(key) {
     save();
     return files.filter(Boolean);
 }
+
+// ---- Leftovers (0.5.0) ----
+
+/**
+ * Give everything stored for oldKey (outfits, drawers, chat choices, history) to newKey.
+ * Only into a character / persona with no outfits yet, and only char → char or persona → persona.
+ * Nothing already stored for newKey is overwritten.
+ */
+export function moveEntity(oldKey, newKey) {
+    if (!oldKey || !newKey || oldKey === newKey || isCharKey(oldKey) !== isCharKey(newKey)) return false;
+    const s = settings();
+    const from = s.entities[oldKey];
+    const to = s.entities[newKey];
+    if (!from || to?.outfits?.length) return false;
+    s.entities[newKey] = from;
+    delete s.entities[oldKey];
+    for (const e of Object.values(s.entities)) {
+        for (const o of e.outfits) if (o.pair?.key === oldKey) o.pair.key = newKey;
+    }
+    const oldAvatar = avatarOfKey(oldKey), newAvatar = avatarOfKey(newKey);
+    for (const table of CHAT_TABLES) {
+        const rows = s[table];
+        for (const row of Object.values(rows)) {
+            if (!(oldKey in row)) continue;
+            if (!(newKey in row)) row[newKey] = row[oldKey];
+            delete row[oldKey];
+        }
+        if (!isCharKey(oldKey)) continue;
+        // A character's chats are stored under its avatar name.
+        for (const k of Object.keys(rows)) {
+            if (!k.startsWith(oldAvatar + '::')) continue;
+            const nk = newAvatar + k.slice(oldAvatar.length);
+            if (!rows[nk]) rows[nk] = rows[k];
+            else for (const [ek, v] of Object.entries(rows[k])) if (!(ek in rows[nk])) rows[nk][ek] = v;
+            delete rows[k];
+        }
+    }
+    if (isCharKey(oldKey)) {
+        for (const k of Object.keys(s.branchDone)) {
+            if (!k.startsWith(oldAvatar + '::')) continue;
+            const nk = newAvatar + k.slice(oldAvatar.length);
+            if (s.branchDone[nk] === undefined) s.branchDone[nk] = s.branchDone[k];
+            delete s.branchDone[k];
+        }
+    }
+    save();
+    return true;
+}
+
+/** Files Facets uploaded that no outfit uses any more. */
+export function unusedFiles() {
+    const s = settings();
+    const used = new Set();
+    for (const e of Object.values(s.entities)) {
+        for (const o of e.outfits) { if (o.orig) used.add(o.orig); if (o.sq) used.add(o.sq); }
+    }
+    return s.files.filter(p => p && !used.has(p));
+}

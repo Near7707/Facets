@@ -6,6 +6,7 @@ import {
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
     addDrawer, renameDrawer, deleteDrawer, timelineOf, deletePoint, tellAgain, muteTell,
     setDrawerKeywords, cleanKeywords, randomOf, setRandom, DEFAULT_IGNORE,
+    removeEntity, moveEntity, unusedFiles,
 } from './store.js';
 import { rollDice } from './auto.js';
 import {
@@ -22,7 +23,7 @@ export function setVersion(v) { VERSION = v; }
 
 const state = {
     open: false,
-    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers | history
+    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers | history | leftovers | move
     tab: 'char',
     drawer: '', // drawer tab shown in the wardrobe ('' = all)
     fromSettings: false,
@@ -34,6 +35,7 @@ const state = {
     busy: false,
     pairTarget: '',
     histMore: false,
+    moveFrom: '', // leftover being moved
 };
 
 const HISTORY_PAGE = 50;
@@ -225,6 +227,8 @@ function back() {
         case 'pair': state.screen = 'edit'; break;
         case 'drawers': state.screen = 'organize'; break;
         case 'history': state.screen = 'wardrobe'; state.histMore = false; break;
+        case 'leftovers': state.screen = 'wardrobe'; break;
+        case 'move': state.screen = 'leftovers'; state.moveFrom = ''; break;
         case 'settings': case 'organize': state.screen = 'wardrobe'; break;
         default: closeWardrobe(); return;
     }
@@ -247,6 +251,8 @@ function render() {
         case 'pair': [head, body, foot] = viewPair(); break;
         case 'drawers': [head, body, foot] = viewDrawers(); break;
         case 'history': [head, body, foot] = viewHistory(); break;
+        case 'leftovers': [head, body, foot] = viewLeftovers(); break;
+        case 'move': [head, body, foot] = viewMove(); break;
     }
     const lang = getLanguage();
     root.innerHTML = `
@@ -334,7 +340,7 @@ function viewWardrobe() {
         ? `<button type="button" class="facets-btn facets-small" data-act="history" title="${esc(t('history'))}"><i class="fa-solid fa-clock-rotate-left"></i><span>${esc(t('history_short'))}</span></button>` : '';
     const diceBtn = chatKey && e.outfits.length
         ? `<button type="button" class="facets-btn facets-small" data-act="dice" title="${esc(t('dice'))}" aria-label="${esc(t('dice'))}"><i class="fa-solid fa-dice"></i></button>` : '';
-    let body = `<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
+    let body = `${state.fromSettings ? leftoverBar() : ''}<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
         <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
         ${chatKey && e.outfits.length ? randomRow(e, key, chatKey) : ''}
         ${drawerChips(e, drawer)}
@@ -481,6 +487,175 @@ function viewOrganize() {
         <button type="button" class="facets-btn" data-act="drawers" title="${esc(t('drawers'))}"><i class="fa-solid fa-box-archive"></i><span>${esc(t('drawers'))}</span></button>
         <button type="button" class="facets-btn facets-primary" data-act="done">${esc(t('done'))}</button></div>`;
     return [head, body, foot];
+}
+
+// ---------- leftovers of deleted characters / personas (0.5.0) ----------
+
+/**
+ * Stored characters / personas that SillyTavern no longer has.
+ * null while SillyTavern's character list is not ready, so nothing is mistaken for deleted.
+ */
+function findLeftovers() {
+    const chars = allCharacters();
+    if (!chars.length) return null;
+    const haveChar = new Set(chars.map(c => charKey(c.avatar)));
+    const personas = allPersonas();
+    const havePersona = new Set(personas.map(p => personaKey(p.avatar)));
+    const nowPersona = currentPersonaAvatar();
+    if (nowPersona) havePersona.add(personaKey(nowPersona));
+    const out = { char: [], persona: [], empty: [] };
+    for (const [k, e] of Object.entries(settings().entities)) {
+        const isChar = isCharKey(k);
+        if (isChar ? haveChar.has(k) : (!personas.length || havePersona.has(k))) continue;
+        if (!e?.outfits?.length) out.empty.push(k);
+        else out[isChar ? 'char' : 'persona'].push(k);
+    }
+    return out;
+}
+
+function leftoverName(key) {
+    return getEntity(key)?.name || avatarOfKey(key).replace(/\.[a-z0-9]+$/i, '');
+}
+
+function leftoverBar() {
+    const left = findLeftovers();
+    if (!left) return '';
+    const n = left.char.length + left.persona.length;
+    const files = n ? 0 : unusedFiles().length;
+    if (!n && !files) return '';
+    const text = n ? t('left_bar', { n }) : t('left_bar_files', { n: files });
+    return `<div class="facets-leftbar">
+        <div class="facets-leftbar-text" title="${esc(text)}">${esc(text)}</div>
+        <button type="button" class="facets-btn facets-small" data-act="leftovers">${esc(t('left_open'))}</button>
+      </div>`;
+}
+
+function leftoverRow(key) {
+    const e = getEntity(key);
+    const o = e.outfits[0];
+    const name = leftoverName(key);
+    const count = t('left_count', { n: e.outfits.length });
+    return `<div class="facets-hist-row facets-left-row">
+        <div class="facets-hist-thumb">${o ? `<img src="${esc(urlOf(o.sq || o.orig))}" alt="" loading="lazy" draggable="false">` : ''}</div>
+        <div class="facets-hist-text">
+          <div class="facets-hist-name" title="${esc(name)}">${esc(name)}</div>
+          <div class="facets-hist-time">${esc(count)}</div>
+        </div>
+        <button type="button" class="facets-btn facets-small" data-act="left-move" data-key="${esc(key)}">${esc(t('left_move'))}</button>
+        <button type="button" class="facets-iconbtn facets-danger-icon" data-act="left-delete" data-key="${esc(key)}" title="${esc(t('left_delete'))}" aria-label="${esc(t('left_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
+      </div>`;
+}
+
+function viewLeftovers() {
+    const head = headTitle(t('left_title'));
+    const left = findLeftovers();
+    const files = left ? unusedFiles() : [];
+    const section = (title, keys) => keys.length
+        ? `<div class="facets-stitle">${esc(title)}</div>${keys.map(leftoverRow).join('')}` : '';
+    let inner = left ? section(t('left_chars'), left.char) + section(t('left_personas'), left.persona) : '';
+    if (inner) inner = `<div class="facets-note">${esc(t('left_intro'))}</div>${inner}`;
+    if (files.length) {
+        inner += `<div class="facets-stitle">${esc(t('left_files'))}</div>
+          <div class="facets-hist-row facets-left-row">
+            <div class="facets-hist-text">
+              <div class="facets-hist-name">${esc(t('left_files_n', { n: files.length }))}</div>
+              <div class="facets-hist-time">${esc(t('left_files_note'))}</div>
+            </div>
+            <button type="button" class="facets-iconbtn facets-danger-icon" data-act="left-files" title="${esc(t('left_delete'))}" aria-label="${esc(t('left_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
+          </div>`;
+    }
+    const body = `<div class="facets-stack">${inner || `<div class="facets-empty facets-empty-inline"><div class="facets-empty-body">${esc(t('left_none'))}</div></div>`}</div>`;
+    const foot = inner
+        ? `<div class="facets-row"><button type="button" class="facets-btn facets-danger-solid facets-wide" data-act="left-all">${esc(t('left_delete_all'))}</button></div>`
+        : '';
+    return [head, body, foot];
+}
+
+/** Where a leftover can go: same kind, not itself, and no outfits yet. */
+function moveTargets(from) {
+    const list = isCharKey(from)
+        ? allCharacters().map(c => [charKey(c.avatar), c.name])
+        : allPersonas().map(p => [personaKey(p.avatar), p.name]);
+    const seen = new Set();
+    return list.filter(([k]) => {
+        if (k === from || seen.has(k) || getEntity(k)?.outfits?.length) return false;
+        seen.add(k);
+        return true;
+    });
+}
+
+function viewMove() {
+    const from = state.moveFrom;
+    const e = getEntity(from);
+    if (!e) { state.screen = 'leftovers'; return viewLeftovers(); }
+    const head = headTitle(t('move_title'));
+    const targets = moveTargets(from);
+    const rows = targets.map(([k, name]) => `<div class="facets-hist-row facets-move-row" role="button" tabindex="0" data-act="move-to" data-key="${esc(k)}">
+        <div class="facets-hist-thumb"><img src="${esc(defaultThumb(k))}" alt="" loading="lazy" draggable="false"></div>
+        <div class="facets-hist-text"><div class="facets-hist-name" title="${esc(name)}">${esc(name)}</div></div>
+        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+      </div>`).join('');
+    const body = `<div class="facets-stack">
+        <div class="facets-hist-row is-base">
+          <div class="facets-hist-thumb">${e.outfits[0] ? `<img src="${esc(urlOf(e.outfits[0].sq || e.outfits[0].orig))}" alt="" draggable="false">` : ''}</div>
+          <div class="facets-hist-text">
+            <div class="facets-hist-name">${esc(leftoverName(from))}</div>
+            <div class="facets-hist-time">${esc(t('left_count', { n: e.outfits.length }))}</div>
+          </div>
+        </div>
+        <div class="facets-note">${esc(t('move_note'))}</div>
+        ${rows || `<div class="facets-empty facets-empty-inline"><div class="facets-empty-body">${esc(t('move_none'))}</div></div>`}
+      </div>`;
+    return [head, body, ''];
+}
+
+async function moveLeftover(toKey) {
+    const from = state.moveFrom;
+    if (!from || !toKey || !getEntity(from)) return;
+    if (!moveTargets(from).some(([k]) => k === toKey)) { toast('warning', t('move_none')); render(); return; }
+    const toName = displayName(toKey);
+    if (!(await confirmBox(t('confirm_move', { from: leftoverName(from), to: toName }), t('left_move')))) return;
+    if (!moveEntity(from, toKey)) { toast('warning', t('move_none')); render(); return; }
+    getEntity(toKey, false, toName);
+    save();
+    state.moveFrom = '';
+    state.tab = isCharKey(toKey) ? 'char' : 'persona';
+    state.pick[state.tab] = toKey;
+    state.drawer = '';
+    state.screen = 'wardrobe';
+    applyAllSoon();
+    toast('success', t('moved', { name: toName }));
+    render();
+}
+
+/** keys = leftovers to delete (null = all of them); withFiles = also pictures no outfit uses. */
+async function deleteLeftovers(keys, withFiles) {
+    const left = findLeftovers();
+    if (!left) return;
+    const all = [...left.char, ...left.persona, ...left.empty];
+    let msg;
+    if (keys === null) {
+        keys = all;
+        msg = t('confirm_left_all');
+    } else {
+        keys = keys.filter(k => all.includes(k)); // only what is really a leftover right now
+        if (keys.length) msg = t('confirm_left_delete', { name: leftoverName(keys[0]), n: getEntity(keys[0]).outfits.length });
+        else if (withFiles && unusedFiles().length) msg = t('confirm_left_files', { n: unusedFiles().length });
+        else { render(); return; }
+    }
+    if (!(await confirmBox(msg, t('left_delete')))) return;
+    await withBusy(async () => {
+        const paths = [];
+        for (const k of keys) paths.push(...removeEntity(k));
+        if (withFiles) paths.push(...unusedFiles());
+        let failed = 0;
+        for (const p of new Set(paths)) if (!(await deletePath(p))) failed++;
+        save();
+        applyAllSoon();
+        if (failed) toast('warning', t('left_failed', { n: failed }));
+        else toast('success', t('left_deleted'));
+    });
+    render();
 }
 
 function viewDrawers() {
@@ -1128,6 +1303,12 @@ function onClick(e) {
         case 'tab': state.tab = el.dataset.tab; state.drawer = ''; state.screen = 'wardrobe'; render(); break;
         case 'drawer': state.drawer = el.dataset.drawer || ''; render(); break;
         case 'history': state.screen = 'history'; state.histMore = false; render(); break;
+        case 'leftovers': state.screen = 'leftovers'; render(); break;
+        case 'left-move': state.moveFrom = el.dataset.key || ''; state.screen = 'move'; render(); break;
+        case 'move-to': moveLeftover(el.dataset.key); break;
+        case 'left-delete': deleteLeftovers([el.dataset.key], false); break;
+        case 'left-files': deleteLeftovers([], true); break;
+        case 'left-all': deleteLeftovers(null, true); break;
         case 'history-more': state.histMore = true; render(); break;
         case 'dice': {
             const key = activeKey();

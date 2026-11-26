@@ -23,6 +23,7 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
 - **Tell the AI.** Each outfit has a *look description* (e.g. "black suit, hair slicked back"). When you change into an outfit with a different description (picked with *This chat only*), it is sent through SillyTavern's extension prompt for the next few AI replies (1 / 3 / 5 / every time, in ⚙). The wardrobe shows whether it is being sent; use *Not this time* if you only changed the picture, or *Tell again* if the AI seems to forget. Empty description = picture only. A *Whole character* pick changes the picture only. Off by default.
 - **Where it shows:** chat message avatars, and the character list, character info page and welcome-screen recent chats (each group can be turned off). Only what is shown on screen changes; the card's own avatar is never replaced.
 - **Backup and import** to move to another device (picture files can be included).
+- **Leftover outfits.** If a character or persona was deleted while Facets was off (or on another device), its outfits stay behind. Outside a chat, the wardrobe shows a *Clean up* line: delete them, or *Move* them to a character/persona that has no outfits yet (handy if you renamed one while Facets was off). Pictures Facets uploaded that no outfit uses can be deleted there too.
 - **Delete all Facets data** removes every picture Facets uploaded and all Facets settings.
 - English and Korean. Starts in SillyTavern's language (Korean, otherwise English); change it in ⚙ or in Extensions → Facets.
 

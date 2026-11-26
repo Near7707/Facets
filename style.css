@@ -693,3 +693,23 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-drawer-kw { display: flex; align-items: center; gap: 6px; margin: -2px 0 6px; }
 .facets-drawer-kw-icon { flex: 0 0 auto; font-size: 14px; opacity: 0.8; }
 .facets-drawer-kw .facets-input { flex: 1 1 auto; min-width: 0; font-size: 16px; }
+
+/* 0.5.0: leftovers of deleted characters / personas */
+.facets-leftbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 6px 6px 6px 10px;
+    border: 1px dashed var(--facets-border);
+    border-radius: 12px;
+    background: var(--facets-surface);
+    font-size: 13px;
+}
+.facets-leftbar-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: var(--facets-text); }
+.facets-leftbar .facets-btn { flex: 0 0 auto; white-space: nowrap; }
+.facets-left-row .facets-btn { flex: 0 0 auto; white-space: nowrap; }
+.facets-left-row .facets-iconbtn { flex: 0 0 auto; }
+.facets-move-row { cursor: pointer; }
+.facets-move-row > i { flex: 0 0 auto; opacity: 0.6; padding: 0 6px; }
+.facets-move-row:focus-visible { outline: 2px solid var(--facets-accent); outline-offset: 1px; }

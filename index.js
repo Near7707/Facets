@@ -15,7 +15,7 @@ import {
 import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender, notifyAuto } from './src/ui.js';
 import { onReply } from './src/auto.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 setVersion(VERSION);
 
 function langOptions() {
