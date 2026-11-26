@@ -1,11 +1,12 @@
 // Backup / import / clean up. Only Facets' own settings and Facets' own uploaded files are touched.
 
 import { t } from './i18n.js';
-import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx } from './store.js';
+import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx, CHAT_TABLES as STORE_TABLES } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
 const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide'];
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo'];
+// Every table keyed by chat (the same list the store moves on renames), plus branch marks.
+const CHAT_TABLES = [...STORE_TABLES, 'branchDone'];
 
 export async function exportBackup(toast) {
     const s = settings();
@@ -15,12 +16,7 @@ export async function exportBackup(toast) {
         exported: new Date().toISOString(),
         prefs: Object.fromEntries(PREF_KEYS.map(k => [k, s[k]])),
         entities: structuredClone(s.entities),
-        chats: structuredClone(s.chats),
-        timelines: structuredClone(s.timelines),
-        tells: structuredClone(s.tells),
-        branchDone: structuredClone(s.branchDone),
-        randoms: structuredClone(s.randoms),
-        pins: structuredClone(s.pins),
+        ...Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(s[k] || {})])),
         images: null,
     };
     if (s.backupImages) {

@@ -1,6 +1,7 @@
 // "In the chat" pictures (0.6.0): the current outfit picture placed over the chat.
 // 0.6.1: pinned pictures — chosen outfit pictures placed in one chat only. Each picture is a "piece".
 // 0.7.0: free placement anywhere below SillyTavern's top bar (also beside the chat on a PC), and turning.
+// 0.8.0: borders (deco.js); the settings screen moved to the Photo Booth.
 // Only our own elements are added (one fixed layer on <body>); SillyTavern's elements are never changed.
 // The input bar is cut out of the layer, so pictures go behind it and it always stays visible and clickable.
 // SillyTavern's top bar, side panels, wand / options menus, popups and toasts are all higher than the layer.
@@ -15,6 +16,7 @@ import {
 import { urlOf } from './images.js';
 import { currentScene, onApply } from './apply.js';
 import { syncTheme } from './theme.js';
+import { paintPiece, isCutShape } from './deco.js';
 
 let layer = null;
 const figures = new Map(); // piece id -> { fig, img, dot, handle, src, ar, broken, visible, center }
@@ -143,6 +145,20 @@ function pictureUrl(key, outfit) {
     if (outfit) return urlOf(outfit.orig || outfit.sq);
     const avatar = encodeURIComponent(avatarOfKey(key));
     return isCharKey(key) ? `/characters/${avatar}` : `/User%20Avatars/${avatar}`;
+}
+
+/** For the Photo Booth: the settings, outfit and full picture of one piece (null if it isn't there). */
+export function pieceInfo(pid) {
+    const st = stOf(pid);
+    if (!st) return null;
+    const outfit = outfitOf(pid);
+    if (splitPid(pid).pinId && !outfit) return null;
+    return { st, outfit, src: pictureUrl(splitPid(pid).ek, outfit) };
+}
+
+/** Redraw one piece after its border changed. */
+export function redrawPiece(pid) {
+    if (shown.includes(pid)) drawOne(pid);
 }
 
 function thumbUrl(key, outfit) {
@@ -314,8 +330,10 @@ function entryFor(key) {
 
 /** Width and height of a picture for a place. */
 function sizeOf(p, st, f, H) {
-    const ar = st.sticker ? 1 : (f?.ar || 0.6);
-    const h = p.size * H * (st.sticker ? 0.6 : 1);
+    // Pictures cut into a circle, heart or star are square and a bit smaller (like the old sticker).
+    const cut = isCutShape(st.deco);
+    const ar = cut ? 1 : (f?.ar || 0.6);
+    const h = p.size * H * (cut ? 0.6 : 1);
     return { w: h * ar, h };
 }
 
@@ -329,7 +347,7 @@ function upgradePlace(pid, st) {
     const p = st?.place?.[kind];
     if (!p || p.v === 2) return true;
     const f = figures.get(pid);
-    if (!st.sticker && !f?.ar && !f?.broken) return false;
+    if (!isCutShape(st.deco) && !f?.ar && !f?.broken) return false;
     if (!geo) return false;
     const sheld = document.getElementById('sheld')?.getBoundingClientRect();
     const chat = document.getElementById('chat')?.getBoundingClientRect();
@@ -411,7 +429,7 @@ function drawOne(key) {
     const b = boxOf(key, st, f, W, H);
     const showFig = ready && !st.hidden && !f.broken && W > 0 && H > 0;
     f.fig.hidden = !showFig;
-    f.fig.classList.toggle('is-sticker', st.sticker);
+    paintPiece(f, st.deco); // 0.8.0: border
     f.fig.classList.toggle('is-locked', st.locked);
     f.fig.classList.toggle('is-flip', st.flip);
     f.fig.classList.toggle('is-active', gesture?.key === key);

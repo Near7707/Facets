@@ -1,5 +1,7 @@
 // Facets data lives only in extension settings (never in cards, chat files or chat metadata).
 
+import { cleanDeco, cleanFrame, STICKER_DECO } from './deco.js';
+
 export const MODULE = 'facets';
 export const FORMAT = 1;
 export const DEFAULT_MARK = '__default__';
@@ -43,6 +45,8 @@ const DEFAULTS = Object.freeze({
     // Pictures pinned in one chat (0.6.1): chatKey -> { entityKey: Pin[] }
     pins: {},
     pinMemo: {},
+    // Avatar frames (0.8.0): chatKey -> { entityKey: Frame }
+    frames: {},
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -79,7 +83,7 @@ export function migrate(s) {
     if (typeof s.format !== 'number') s.format = FORMAT;
     // Future format upgrades go here: if (s.format < 2) { ...; s.format = 2; }
     if (!Array.isArray(s.files)) s.files = [];
-    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo']) {
+    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo', 'frames']) {
         if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
     }
     for (const [ck, row] of Object.entries(s.pins)) {
@@ -105,6 +109,16 @@ export function migrate(s) {
         }
         if (!Object.keys(row).length) delete s.pinMemo[ck];
     }
+    // Avatar frames (0.8.0). Cleaned once, then kept as they are (same reason as above).
+    for (const [ck, row] of Object.entries(s.frames)) {
+        if (!row || typeof row !== 'object') { delete s.frames[ck]; continue; }
+        for (const [ek, f] of Object.entries(row)) {
+            if (f && cleaned.has(f)) continue;
+            const clean = cleanFrame(f);
+            if (clean) { row[ek] = clean; cleaned.add(clean); } else delete row[ek];
+        }
+        if (!Object.keys(row).length) delete s.frames[ck];
+    }
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
     for (const row of Object.values(s.timelines)) {
@@ -129,6 +143,8 @@ export function migrate(s) {
             for (const l of e.layouts) {
                 l.name = typeof l.name === 'string' ? l.name.slice(0, 40) : '';
                 l.pins = Array.isArray(l.pins) ? l.pins.map(cleanPin).filter(Boolean).slice(0, MAX_PINS) : [];
+                // 0.8.0: a layout also keeps the avatar frame (null = no frame). Older layouts have none.
+                if ('frame' in l) l.frame = cleanFrame(l.frame);
             }
             cleaned.add(e.layouts);
         }
@@ -146,7 +162,8 @@ export function migrate(s) {
 }
 
 // ---- "In the chat" pictures (0.6.0, free placement 0.7.0) ----
-// Stage = { on, sticker, flip, opacity, locked, hidden, place: { narrow?: Place, wide?: Place }, pose? }
+// Stage = { on, deco, flip, opacity, locked, hidden, place: { narrow?: Place, wide?: Place }, pose? }
+// deco (0.8.0) = the picture's border (deco.js), null = none. The old "sticker" switch becomes a round white border.
 // Place (0.7.0, v: 2) = { v, x, y, size, rot }: the middle of the picture as parts of the picture layer
 //   (the whole window below SillyTavern's top bar), height as a part of the layer, turn in degrees.
 // Older places (no v) were parts of the chat area and depended on a pose; they are changed into the
@@ -187,7 +204,7 @@ export function cleanStage(st) {
     return {
         on: s.on === true,
         pose: POSES.includes(s.pose) ? s.pose : 'stand',
-        sticker: s.sticker === true,
+        deco: s.deco !== undefined ? cleanDeco(s.deco) : (s.sticker === true ? { ...STICKER_DECO } : null),
         flip: s.flip === true,
         opacity: clamp(s.opacity, OPACITY_MIN, 1, 1),
         locked: s.locked === true,
@@ -282,20 +299,27 @@ export function layoutsOf(entityKey) {
 export function saveLayout(entityKey, chatKey, name) {
     const e = getEntity(entityKey);
     const pins = pinsOf(chatKey, entityKey);
-    if (!e || !pins.length) return null;
+    const frame = frameOf(chatKey, entityKey);
+    if (!e || (!pins.length && !frame)) return null;
     if (!Array.isArray(e.layouts)) e.layouts = [];
     if (e.layouts.length >= MAX_LAYOUTS) return null;
-    const layout = { id: newId(), name: String(name || '').trim().slice(0, 40), pins: structuredClone(pins) };
+    const layout = {
+        id: newId(), name: String(name || '').trim().slice(0, 40), pins: structuredClone(pins),
+        frame: frame ? structuredClone(frame) : null,
+    };
     e.layouts.push(layout);
     save();
     return layout;
 }
 
-/** Put a saved layout into this chat (replaces the pins already there). Returns how many were placed. */
+/**
+ * Put a saved layout into this chat (replaces the pins already there, and the avatar frame if the layout has one).
+ * Returns { pins: how many were placed, frame: whether the frame was set }.
+ */
 export function loadLayout(entityKey, chatKey, layoutId) {
     const e = getEntity(entityKey);
     const layout = e?.layouts?.find(l => l.id === layoutId);
-    if (!layout || !chatKey) return 0;
+    if (!layout || !chatKey) return { pins: 0, frame: false };
     const have = new Set(e.outfits.map(o => o.id));
     const list = layout.pins.filter(p => have.has(p.outfit)).slice(0, MAX_PINS)
         .map(p => ({ ...structuredClone(p), id: newId() }));
@@ -307,8 +331,34 @@ export function loadLayout(entityKey, chatKey, layoutId) {
         delete s.pins[chatKey][entityKey];
         if (!Object.keys(s.pins[chatKey]).length) delete s.pins[chatKey];
     }
+    const frame = 'frame' in layout;
+    if (frame) putFrame(s, chatKey, entityKey, layout.frame);
     save();
-    return list.length;
+    return { pins: list.length, frame };
+}
+
+// ---- Avatar frames (0.8.0): per chat, character and persona apart ----
+
+export function frameOf(chatKey, entityKey) {
+    return chatKey ? settings().frames[chatKey]?.[entityKey] || null : null;
+}
+
+export function setFrame(chatKey, entityKey, frame) {
+    if (!chatKey || !entityKey) return;
+    putFrame(settings(), chatKey, entityKey, frame);
+    save();
+}
+
+// Takes s (see dropMemo): settings() in between would tidy away a row being filled.
+function putFrame(s, chatKey, entityKey, frame) {
+    const clean = cleanFrame(frame);
+    if (clean) {
+        (s.frames[chatKey] || (s.frames[chatKey] = {}))[entityKey] = clean;
+        cleaned.add(clean);
+    } else if (s.frames[chatKey]) {
+        delete s.frames[chatKey][entityKey];
+        if (!Object.keys(s.frames[chatKey]).length) delete s.frames[chatKey];
+    }
 }
 
 export function renameLayout(entityKey, layoutId, name) {
@@ -454,7 +504,7 @@ export function deleteDrawer(entityKey, drawerId) {
 }
 
 // Tables keyed by chat, each row keyed by entity.
-const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins', 'pinMemo'];
+export const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins', 'pinMemo', 'frames'];
 // What a "whole character" change resets (the "random each reply" switch stays on).
 const PICK_TABLES = ['chats', 'timelines', 'tells'];
 

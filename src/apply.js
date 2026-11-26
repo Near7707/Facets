@@ -3,9 +3,10 @@
 
 import {
     ctx, settings, charKey, personaKey, effectiveOutfit, chatOnlyOutfit, chatKeyFor, findOutfit, chatChoice,
-    outfitAt, tellOf, setupBranch, DEFAULT_MARK,
+    outfitAt, tellOf, setupBranch, DEFAULT_MARK, frameOf,
 } from './store.js';
 import { urlOf } from './images.js';
+import { frameCss } from './deco.js';
 
 const PROMPT_KEY = 'facets_appearance';
 let personaModule = null;
@@ -241,6 +242,60 @@ export function applyPreview() {
 
 export function restoreEverything() {
     document.querySelectorAll('img.facets-avatar').forEach(restoreImg);
+    document.querySelectorAll('img[data-facets-frame]').forEach(img => delete img.dataset.facetsFrame);
+    document.getElementById('facets_frames')?.remove();
+    lastFrameCss = '';
+}
+
+// ---- Avatar frames (0.8.0) ----
+// Decoration only: a mark on the chat's avatar pictures and one <style> of our own.
+// The rings and ribbons are drawn around the avatar with ::before / ::after; nothing is moved or resized.
+
+let lastFrameCss = '';
+
+export const FRAME_SEL = {
+    c: ['#chat .mes .avatar:has(img[data-facets-frame="c"])', '#chat .mes .avatar img[data-facets-frame="c"]'],
+    p: ['#chat .mes .avatar:has(img[data-facets-frame="p"])', '#chat .mes .avatar img[data-facets-frame="p"]'],
+};
+
+export function applyFrames() {
+    const sc = currentScene();
+    const want = { c: null, p: null };
+    if (sc.chatKey && !sc.inGroup) {
+        want.c = frameOf(sc.chatKey, sc.charKey);
+        want.p = sc.personaKey ? frameOf(sc.chatKey, sc.personaKey) : null;
+    }
+    let radius = '';
+    let box = null;
+    for (const img of document.querySelectorAll('#chat .mes .avatar img')) {
+        const key = (want.c || want.p) ? keyFromSrc(originalSrc(img)) : null;
+        const tag = key && key === sc.charKey && want.c ? 'c' : key && key === sc.personaKey && want.p ? 'p' : '';
+        if (tag) {
+            if (img.dataset.facetsFrame !== tag) img.dataset.facetsFrame = tag;
+            if (!box) {
+                // Where the picture sits in its avatar box (every chat avatar has the same size).
+                const r = img.getBoundingClientRect();
+                const o = img.closest('.avatar')?.getBoundingClientRect();
+                if (o && r.width > 0 && r.height > 0) {
+                    box = { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
+                    radius = getComputedStyle(img).borderRadius;
+                }
+            }
+        } else if (img.dataset.facetsFrame) delete img.dataset.facetsFrame;
+    }
+    // The ring follows the avatar's own corner radius (round, square, rounded or tall rectangle).
+    const r = /^[\d.]+(px|%)$/.test(radius) ? radius : '50%';
+    const css = frameCss(FRAME_SEL.c[0], FRAME_SEL.c[1], want.c, r, box) + frameCss(FRAME_SEL.p[0], FRAME_SEL.p[1], want.p, r, box);
+    if (css === lastFrameCss) return;
+    lastFrameCss = css;
+    let el = document.getElementById('facets_frames');
+    if (!css) { el?.remove(); return; }
+    if (!el) {
+        el = document.createElement('style');
+        el.id = 'facets_frames';
+        document.head.appendChild(el);
+    }
+    el.textContent = css;
 }
 
 // Other parts (the "in the chat" pictures) that redraw with the avatars.
@@ -252,7 +307,7 @@ export function applyAllSoon() {
     if (raf) return;
     raf = requestAnimationFrame(() => {
         raf = 0;
-        try { applyChat(); applyList(); applyRecent(); applyPreview(); updatePrompt(); } catch (e) { console.error('[Facets]', e); }
+        try { applyChat(); applyFrames(); applyList(); applyRecent(); applyPreview(); updatePrompt(); } catch (e) { console.error('[Facets]', e); }
         for (const fn of extraAppliers) {
             try { fn(); } catch (e) { console.error('[Facets]', e); }
         }
