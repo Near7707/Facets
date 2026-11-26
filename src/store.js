@@ -67,6 +67,10 @@ export function settings() {
     return s;
 }
 
+// Stage objects and pin lists already cleaned. settings() runs migrate() on every call, and cleaning them
+// again would swap in new objects while a caller is still changing the old ones (0.7.0).
+const cleaned = new WeakSet();
+
 export function migrate(s) {
     for (const [k, v] of Object.entries(DEFAULTS)) {
         if (s[k] === undefined) s[k] = structuredClone(v);
@@ -80,8 +84,9 @@ export function migrate(s) {
     for (const [ck, row] of Object.entries(s.pins)) {
         if (!row || typeof row !== 'object') { delete s.pins[ck]; continue; }
         for (const [ek, list] of Object.entries(row)) {
+            if (Array.isArray(list) && list.length && cleaned.has(list)) continue;
             const clean = Array.isArray(list) ? list.map(cleanPin).filter(Boolean).slice(0, MAX_PINS) : [];
-            if (clean.length) row[ek] = clean; else delete row[ek];
+            if (clean.length) { row[ek] = clean; cleaned.add(clean); } else delete row[ek];
         }
         if (!Object.keys(row).length) delete s.pins[ck];
     }
@@ -103,13 +108,14 @@ export function migrate(s) {
             if (typeof d.name !== 'string') d.name = '';
             if (typeof d.kw !== 'string') d.kw = '';
         }
-        if (e.stage !== undefined) e.stage = cleanStage(e.stage);
-        if (e.layouts !== undefined) {
+        if (e.stage !== undefined && !cleaned.has(e.stage)) { e.stage = cleanStage(e.stage); cleaned.add(e.stage); }
+        if (e.layouts !== undefined && !cleaned.has(e.layouts)) {
             e.layouts = Array.isArray(e.layouts) ? e.layouts.filter(l => l && typeof l.id === 'string').slice(0, MAX_LAYOUTS) : [];
             for (const l of e.layouts) {
                 l.name = typeof l.name === 'string' ? l.name.slice(0, 40) : '';
                 l.pins = Array.isArray(l.pins) ? l.pins.map(cleanPin).filter(Boolean).slice(0, MAX_PINS) : [];
             }
+            cleaned.add(e.layouts);
         }
         const drawerIds = new Set(e.drawers.map(d => d.id));
         for (const o of e.outfits) {
@@ -124,20 +130,36 @@ export function migrate(s) {
     return s;
 }
 
-// ---- "In the chat" pictures (0.6.0) ----
-// Stage = { on, pose, sticker, flip, opacity, locked, hidden, place: { narrow?: Place, wide?: Place } }
-// Place = { x, y, size } as parts of the chat area (0..1). Phones and PCs keep their own place.
+// ---- "In the chat" pictures (0.6.0, free placement 0.7.0) ----
+// Stage = { on, sticker, flip, opacity, locked, hidden, place: { narrow?: Place, wide?: Place }, pose? }
+// Place (0.7.0, v: 2) = { v, x, y, size, rot }: the middle of the picture as parts of the picture layer
+//   (the whole window below SillyTavern's top bar), height as a part of the layer, turn in degrees.
+// Older places (no v) were parts of the chat area and depended on a pose; they are changed into the
+// new kind the first time they are shown (stage.js). "pose" stays only for that.
+// Phones and PCs keep their own place.
 
 export const POSES = ['stand', 'peek', 'pop', 'lean'];
-export const SIZE_MIN = 0.2;
-export const SIZE_MAX = 0.8;
+export const SIZE_MIN = 0.1;
+export const SIZE_MAX = 0.95;
 export const OPACITY_MIN = 0.3;
 
 const clamp = (v, lo, hi, d) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 
+/** Turn in degrees, kept in -180..180. */
+export function normRot(r) {
+    if (!Number.isFinite(r)) return 0;
+    let x = ((r % 360) + 360) % 360;
+    if (x > 180) x -= 360;
+    return Math.round(x * 10) / 10;
+}
+
 function cleanPlace(p) {
     if (!p || typeof p !== 'object') return undefined;
-    return { x: clamp(p.x, 0, 1, 0.5), y: clamp(p.y, 0, 1, 0.5), size: clamp(p.size, SIZE_MIN, SIZE_MAX, 0.45) };
+    const out = p.v === 2
+        ? { v: 2, x: clamp(p.x, -0.5, 1.5, 0.5), y: clamp(p.y, -0.5, 1.5, 0.5), size: clamp(p.size, SIZE_MIN, SIZE_MAX, 0.45) }
+        : { x: clamp(p.x, 0, 1, 0.5), y: clamp(p.y, 0, 1, 0.5), size: clamp(p.size, 0.2, 0.8, 0.45) };
+    out.rot = normRot(p.rot);
+    return out;
 }
 
 export function cleanStage(st) {

@@ -720,28 +720,6 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-stagerow { display: flex; align-items: center; gap: 10px; }
 .facets-stagerow .facets-toggle { flex: 1 1 auto; min-width: 0; min-height: 36px; }
 .facets-stagerow > .facets-btn { flex: 0 0 auto; }
-.facets-poses { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-@media (max-width: 420px) { .facets-poses { grid-template-columns: 1fr; } }
-.facets-root .facets-pose {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    min-height: 56px;
-    padding: 10px 12px;
-    text-align: left;
-    font: inherit;
-    color: var(--facets-text);
-    background: var(--facets-surface2);
-    border: 1px solid var(--facets-border);
-    border-radius: 12px;
-    cursor: pointer;
-}
-.facets-root .facets-pose > i { flex: 0 0 auto; width: 18px; margin-top: 2px; text-align: center; }
-.facets-pose-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.facets-pose-text b { font-size: 14px; }
-.facets-pose-text small { font-size: 12.5px; color: var(--facets-muted); }
-.facets-root .facets-pose.on { border-color: var(--facets-accent); box-shadow: inset 0 0 0 1px var(--facets-accent); }
-.facets-root .facets-pose.on > i { color: var(--facets-accent); }
 .facets-stage-state {
     display: flex;
     align-items: center;
@@ -755,21 +733,24 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-stage-state > span { flex: 1 1 auto; min-width: 0; }
 .facets-stage-state > .facets-btn { flex: 0 0 auto; }
 
-/* The layer over the chat area (inside #sheld). Only pictures, dots, tabs and the tool bar take touches. */
+/* The picture layer (0.7.0): fixed on <body>, the whole window below SillyTavern's top bar.
+   Above the chat (#sheld, z-index 30), below SillyTavern's top bar (3005), side panels (3000), wand / options menus,
+   popups and toasts.
+   The input bar is cut out with clip-path (set in stage.js). Only pictures, dots, tabs and the tool bar take touches. */
 .facets-stage {
     --facets-bg: #18181a;
     --facets-text: #e8e8e2;
     --facets-surface2: #2e2e31;
     --facets-border: #4a4a4f;
     --facets-accent: #e18a24;
-    position: absolute;
+    position: fixed;
     left: 0;
-    right: 0;
     top: 0;
+    width: 0;
     height: 0;
     overflow: hidden;
     pointer-events: none;
-    z-index: 30;
+    z-index: 35;
     font-size: 14px;
     line-height: 1.3;
 }
@@ -782,7 +763,7 @@ html.facets-open body { overscroll-behavior: none; }
     pointer-events: auto;
     touch-action: none;
     cursor: grab;
-    transform-origin: 50% 100%;
+    transform-origin: 50% 50%;
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
@@ -887,6 +868,38 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-stage-op input[type="range"] { flex: 1 1 auto; }
 .facets-stage-op input[type="range"] { width: 96px; min-width: 60px; height: 32px; margin: 0; accent-color: var(--facets-accent); }
 @media (max-width: 360px) { .facets-stage-btn > span { display: none; } }
+/* 0.7.0 turning: [⟲] slider 90° [⟳] in the tool bar, and a round handle above the picture */
+.facets-stage-rotrow { gap: 4px; padding: 0; }
+.facets-stage-rotrow input[type="range"] { width: 120px; }
+.facets-stage-ico { padding: 0; width: 36px; }
+.facets-stage-deg { flex: 0 0 auto; min-width: 42px; text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.facets-stage-rot {
+    position: absolute;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 50%;
+    font: inherit;
+    font-size: 14px;
+    color: var(--facets-text);
+    background: var(--facets-bg);
+    border: 2px solid var(--facets-accent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+    margin: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+.facets-stage-rot:active { cursor: grabbing; }
+.facets-turnrow { display: flex; align-items: center; gap: 8px; }
+.facets-turnrow > .facets-turnlabel { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facets-turnrow > .facets-turndeg { flex: 0 0 auto; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* 0.6.1 pinned pictures and layouts */
 .facets-root .facets-stage-head { margin-top: 6px; font-size: 14px; color: var(--facets-text); }

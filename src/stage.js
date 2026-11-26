@@ -1,80 +1,141 @@
-// "In the chat" pictures (0.6.0): the current outfit placed at the edge of the chat area.
+// "In the chat" pictures (0.6.0): the current outfit picture placed over the chat.
 // 0.6.1: pinned pictures — chosen outfit pictures placed in one chat only. Each picture is a "piece".
-// Only our own elements are added (one layer inside #sheld); SillyTavern's elements are never changed.
-// Unlocked: drag to move, pinch / mouse wheel to resize, tap for a small tool bar.
-// Locked: touches pass through the picture; only a small 🔒 dot stays clickable.
+// 0.7.0: free placement anywhere below SillyTavern's top bar (also beside the chat on a PC), and turning.
+// Only our own elements are added (one fixed layer on <body>); SillyTavern's elements are never changed.
+// The input bar is cut out of the layer, so pictures go behind it and it always stays visible and clickable.
+// SillyTavern's top bar, side panels, wand / options menus, popups and toasts are all higher than the layer.
+// Unlocked: drag to move, pinch / mouse wheel to resize, twist / Shift + wheel / handle to turn,
+// tap for a small tool bar. Locked: touches pass through; only a small 🔒 dot stays clickable.
 
 import { t } from './i18n.js';
 import {
     settings, save, stageOf, effectiveOutfit, isCharKey, avatarOfKey, SIZE_MIN, SIZE_MAX, OPACITY_MIN,
-    pinsOf, getEntity, removePin, POSES,
+    pinsOf, getEntity, removePin, normRot,
 } from './store.js';
 import { urlOf } from './images.js';
 import { currentScene, onApply } from './apply.js';
 import { syncTheme } from './theme.js';
 
 let layer = null;
-const figures = new Map(); // piece id -> { fig, img, dot, handle, src, ar }
+const figures = new Map(); // piece id -> { fig, img, dot, handle, src, ar, broken, visible, center }
 // Piece id: the entity key for the "current outfit" picture, "<entity key>\n<pin id>" for a pinned one.
-const pieces = new Map(); // piece id -> { ek, pinId, chatKey, index }
+let shown = [];
 let toolsKey = ''; // whose tool bar is open
 let gesture = null;
 const pointers = new Map();
+let rotHandle = null;
+let holes = []; // cut-out boxes in layer coordinates
+let geo = null; // { L, T, W, H } of the layer in the window
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const SNAP = 4; // degrees: 0 / 90 / 180 pull the turn in
 
-/** Phones and PCs keep their own place, because the chat area is a very different shape. */
+/** Phones and PCs keep their own place, because the screen is a very different shape. */
 export function screenKind() {
     return window.innerWidth <= 1000 ? 'narrow' : 'wide';
 }
 
-/** Settings of one piece: the entity's stage, or the pin. */
+function splitPid(pid) {
+    const i = String(pid).indexOf('\n');
+    return i < 0 ? { ek: String(pid), pinId: '' } : { ek: pid.slice(0, i), pinId: pid.slice(i + 1) };
+}
+
+/** Settings of one piece: the entity's stage, or the pin in the open chat. */
 function stOf(pid) {
-    const pc = pieces.get(pid);
-    if (!pc) return null;
-    if (!pc.pinId) return stageOf(pc.ek);
-    return pinsOf(pc.chatKey, pc.ek).find(p => p.id === pc.pinId) || null;
+    const { ek, pinId } = splitPid(pid);
+    if (!pinId) return stageOf(ek);
+    const chatKey = currentScene().chatKey;
+    return chatKey ? pinsOf(chatKey, ek).find(p => p.id === pinId) || null : null;
 }
 
 function outfitOf(pid) {
-    const pc = pieces.get(pid);
-    if (!pc) return null;
-    if (!pc.pinId) return effectiveOutfit(pc.ek, pc.chatKey);
+    const { ek, pinId } = splitPid(pid);
+    const chatKey = currentScene().chatKey;
+    if (!pinId) return effectiveOutfit(ek, chatKey);
     const pin = stOf(pid);
-    return getEntity(pc.ek)?.outfits.find(o => o.id === pin?.outfit) || null;
+    return getEntity(ek)?.outfits.find(o => o.id === pin?.outfit) || null;
 }
 
 const PIN_X = [0.5, 0.35, 0.65, 0.2, 0.8, 0.5];
 
 function defaultPlace(pid) {
-    const pc = pieces.get(pid);
-    const size = screenKind() === 'narrow' ? 0.45 : 0.55;
-    // Pinned pictures start in the middle, spread a little, and a bit smaller.
-    if (pc?.pinId) return { x: PIN_X[pc.index % PIN_X.length], y: 0.5, size: size * 0.8 };
-    // Character on the right, persona on the left, so the two never start on top of each other.
-    return { x: isCharKey(pc?.ek || pid) ? 0.8 : 0.2, y: 0.5, size };
+    const { ek, pinId } = splitPid(pid);
+    let size = screenKind() === 'narrow' ? 0.4 : 0.5;
+    let x = isCharKey(ek) ? 0.8 : 0.2; // character right, persona left: they never start on top of each other
+    if (pinId) {
+        // Pinned pictures start in the middle, spread a little, and a bit smaller.
+        const index = Math.max(0, pinsOf(currentScene().chatKey, ek).findIndex(p => p.id === pinId));
+        x = PIN_X[index % PIN_X.length];
+        size *= 0.8;
+    }
+    // Standing just above the input bar: its lower part goes behind it.
+    const formTop = holes[0] && geo?.H ? holes[0].t / geo.H : 0.88;
+    return { v: 2, x, y: clamp(formTop + size * 0.2 - size / 2, size / 2 - 0.1, 1), size, rot: 0 };
 }
 
-function placeNow(key) {
-    return stOf(key)?.place?.[screenKind()] || defaultPlace(key);
+/** Saved place for this kind of screen (only new-kind places; old ones are changed first). */
+function placeNow(pid) {
+    const p = stOf(pid)?.place?.[screenKind()];
+    return p && p.v === 2 ? p : defaultPlace(pid);
 }
 
-function setPlace(key, p) {
-    const st = stOf(key);
+function snapRot(r) {
+    const n = normRot(r);
+    for (const a of [-180, -90, 0, 90, 180]) if (Math.abs(n - a) <= SNAP) return normRot(a);
+    return n;
+}
+
+function setPlace(pid, p) {
+    const st = stOf(pid);
     if (!st) return;
     st.place[screenKind()] = {
-        x: clamp(p.x, 0, 1), y: clamp(p.y, 0, 1), size: clamp(p.size, SIZE_MIN, SIZE_MAX),
+        v: 2,
+        x: clamp(p.x, -0.5, 1.5), y: clamp(p.y, -0.5, 1.5),
+        size: clamp(p.size, SIZE_MIN, SIZE_MAX), rot: normRot(p.rot),
     };
-    drawOne(key);
+    drawOne(pid);
 }
 
-/** Back to the starting place and size (this kind of screen only). */
+/** Back to the starting place, size and turn (this kind of screen only). */
 export function resetPlace(key) {
     const st = stageOf(key);
     if (!st) return;
     delete st.place[screenKind()];
     save();
+}
+
+/** Turn a piece by 90° to the next straight angle (dir 1 = right, -1 = left). Used by the Style screen too. */
+export function turnPiece(pid, dir) {
+    const st = stOf(pid);
+    if (!st) return false;
+    const p = currentPlace(pid);
+    if (!p) return false;
+    const r = p.rot || 0;
+    const next = dir > 0 ? Math.floor(r / 90 + 1e-6) * 90 + 90 : Math.ceil(r / 90 - 1e-6) * 90 - 90;
+    setPlace(pid, { ...p, rot: next });
+    save();
+    if (toolsKey === pid) syncTools();
+    return true;
+}
+
+/** Turn of a piece now (for showing it). */
+export function rotOf(pid) {
+    const p = stOf(pid)?.place?.[screenKind()];
+    return p ? normRot(p.rot) : 0;
+}
+
+/** The place to change: an old-kind place is changed into the new kind first (needs the layer). */
+function currentPlace(pid) {
+    const st = stOf(pid);
+    const p = st?.place?.[screenKind()];
+    if (p && p.v !== 2) {
+        if (!upgradePlace(pid, st)) {
+            // Not drawn yet: keep where it is roughly, only the turn changes.
+            st.place[screenKind()] = { ...defaultPlace(pid), rot: normRot(p.rot) };
+        }
+    }
+    return placeNow(pid);
 }
 
 function pictureUrl(key, outfit) {
@@ -92,15 +153,14 @@ function thumbUrl(key, outfit) {
 // ---------- layer ----------
 
 function ensureLayer() {
-    const sheld = document.getElementById('sheld');
-    if (!sheld) return null;
-    if (layer && sheld.contains(layer)) return layer;
+    if (!document.getElementById('sheld')) return null;
+    if (layer && document.body.contains(layer)) return layer;
     layer?.remove();
     figures.clear();
     layer = document.createElement('div');
     layer.id = 'facets_stage';
     layer.className = 'facets-stage';
-    sheld.appendChild(layer);
+    document.body.appendChild(layer);
     syncTheme(layer);
     layer.addEventListener('pointerdown', onDown);
     layer.addEventListener('pointermove', onMove);
@@ -112,32 +172,62 @@ function ensureLayer() {
     layer.addEventListener('input', onInput);
     layer.addEventListener('change', () => save());
     layer.addEventListener('contextmenu', (e) => { if (e.target.closest('.facets-fig')) e.preventDefault(); });
-    watchSizes(sheld);
+    watchSizes();
     return layer;
 }
 
-/** The chat area: from the top of #chat down to the top of the input bar. Pictures are cut off there. */
+const visibleBox = (el) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return null;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+    return r;
+};
+
+/**
+ * The picture layer: the whole window below SillyTavern's top bar.
+ * The input bar is cut out with clip-path, so pictures look like they are behind it.
+ */
 function placeLayer() {
-    const sheld = document.getElementById('sheld');
-    if (!sheld || !layer) return false;
-    const box = sheld.getBoundingClientRect();
+    if (!layer) return false;
+    const sheld = document.getElementById('sheld')?.getBoundingClientRect();
+    const topBar = visibleBox(document.getElementById('top-settings-holder')) || visibleBox(document.getElementById('top-bar'));
     const chat = document.getElementById('chat')?.getBoundingClientRect();
-    const form = document.getElementById('form_sheld')?.getBoundingClientRect();
-    const top = chat ? Math.max(0, chat.top - box.top) : 0;
-    const bottom = form ? form.top - box.top : box.height;
-    layer.style.top = `${top}px`;
-    layer.style.height = `${Math.max(0, bottom - top)}px`;
-    return bottom - top > 40;
+    let T = topBar ? topBar.bottom : (chat ? chat.top : sheld?.top || 0);
+    T = clamp(Math.round(T), 0, window.innerHeight);
+    const L = 0, W = window.innerWidth, H = Math.max(0, window.innerHeight - T);
+    geo = { L, T, W, H };
+    Object.assign(layer.style, { left: `${L}px`, top: `${T}px`, width: `${W}px`, height: `${H}px` });
+    holes = [];
+    const boxes = [visibleBox(document.getElementById('form_sheld'))];
+    for (const r of boxes) {
+        if (!r) continue;
+        const h = { l: Math.max(0, r.left - L), t: Math.max(0, r.top - T), r: Math.min(W, r.right - L), b: Math.min(H, r.bottom - T) };
+        if (h.r - h.l > 1 && h.b - h.t > 1) holes.push(h);
+    }
+    if (holes.length) {
+        // One outline with a hole (even-odd): the outside, then the hole joined back to the corner.
+        const pts = ['0 0', `${W}px 0`, `${W}px ${H}px`, `0 ${H}px`, '0 0'];
+        for (const h of holes) {
+            pts.push(`${h.l}px ${h.t}px`, `${h.l}px ${h.b}px`, `${h.r}px ${h.b}px`, `${h.r}px ${h.t}px`, `${h.l}px ${h.t}px`, '0 0');
+        }
+        layer.style.clipPath = `polygon(evenodd, ${pts.join(', ')})`;
+    } else {
+        layer.style.clipPath = '';
+    }
+    return H > 60 && W > 60;
 }
 
 let resizeObs = null;
-function watchSizes(sheld) {
+function watchSizes() {
     resizeObs?.disconnect();
     if (!globalThis.ResizeObserver) return;
     resizeObs = new ResizeObserver(() => applySoon());
-    resizeObs.observe(sheld);
-    const form = document.getElementById('form_sheld');
-    if (form) resizeObs.observe(form);
+    for (const id of ['sheld', 'form_sheld', 'top-settings-holder']) {
+        const el = document.getElementById(id);
+        if (el) resizeObs.observe(el);
+    }
 }
 
 /** A phone keyboard is open for the chat input. */
@@ -156,36 +246,28 @@ function keyboardOpen() {
  * (if turned on) and the pictures pinned in this chat.
  */
 function shownKeys() {
-    pieces.clear();
     const sc = currentScene();
     if (!settings().showStage || sc.inGroup || !sc.chatKey) return [];
     const out = [];
     for (const ek of [sc.charKey, sc.personaKey]) {
         if (!ek) continue;
-        if (stageOf(ek)?.on) {
-            pieces.set(ek, { ek, pinId: '', chatKey: sc.chatKey, index: 0 });
-            out.push(ek);
-        }
-        pinsOf(sc.chatKey, ek).forEach((pin, index) => {
-            const pid = `${ek}\n${pin.id}`;
-            pieces.set(pid, { ek, pinId: pin.id, chatKey: sc.chatKey, index });
-            out.push(pid);
-        });
+        if (stageOf(ek)?.on) out.push(ek);
+        for (const pin of pinsOf(sc.chatKey, ek)) out.push(`${ek}\n${pin.id}`);
     }
     return out;
 }
 
 export function applyStage() {
-    const keys = shownKeys();
-    if (!keys.length && !layer) return;
+    shown = shownKeys();
+    if (!shown.length && !layer) return;
     if (!ensureLayer()) return;
     const ok = placeLayer();
-    layer.classList.toggle('facets-stage-off', !ok || keyboardOpen());
+    layer.classList.toggle('facets-stage-off', !ok || keyboardOpen() || !shown.length);
     for (const [key, f] of figures) {
-        if (!keys.includes(key)) { f.fig.remove(); f.dot.remove(); f.handle.remove(); figures.delete(key); }
+        if (!shown.includes(key)) { f.fig.remove(); f.dot.remove(); f.handle.remove(); figures.delete(key); }
     }
-    if (toolsKey && !keys.includes(toolsKey)) closeTools();
-    for (const key of keys) drawOne(key);
+    if (toolsKey && !shown.includes(toolsKey)) closeTools();
+    for (const key of shown) drawOne(key);
 }
 
 let raf = 0;
@@ -218,7 +300,7 @@ function entryFor(key) {
     handle.dataset.key = key;
     handle.innerHTML = '<img alt="" draggable="false">';
     layer.append(fig, dot, handle);
-    f = { fig, img, dot, handle, src: '', ar: 0 };
+    f = { fig, img, dot, handle, src: '', ar: 0, broken: false };
     img.addEventListener('load', () => {
         f.ar = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0;
         f.broken = false;
@@ -229,53 +311,104 @@ function entryFor(key) {
     return f;
 }
 
-/** Box of one picture in the layer, by pose. Returns { left, top, w, h, rot, side }. */
-function boxOf(key, st, f, W, H) {
-    const p = placeNow(key);
-    const ar = st.sticker ? 1 : (f.ar || 0.6);
+/** Width and height of a picture for a place. */
+function sizeOf(p, st, f, H) {
+    const ar = st.sticker ? 1 : (f?.ar || 0.6);
     const h = p.size * H * (st.sticker ? 0.6 : 1);
-    const w = h * ar;
+    return { w: h * ar, h };
+}
+
+/**
+ * Change an old (0.6.x) place into the new kind, so the picture stays about where it was.
+ * Old places were parts of the chat area (top of #chat to the input bar, #sheld wide) and the pose decided
+ * the spot. Needs the picture's shape, so it waits until the picture has loaded.
+ */
+function upgradePlace(pid, st) {
+    const kind = screenKind();
+    const p = st?.place?.[kind];
+    if (!p || p.v === 2) return true;
+    const f = figures.get(pid);
+    if (!st.sticker && !f?.ar && !f?.broken) return false;
+    if (!geo) return false;
+    const sheld = document.getElementById('sheld')?.getBoundingClientRect();
+    const chat = document.getElementById('chat')?.getBoundingClientRect();
+    const form = document.getElementById('form_sheld')?.getBoundingClientRect();
+    if (!sheld) return false;
+    const oL = sheld.left, oW = sheld.width;
+    const oT = chat ? Math.max(sheld.top, chat.top) : sheld.top;
+    const oH = Math.max(1, (form ? form.top : sheld.bottom) - oT);
+    const { w, h } = sizeOf(p, st, f, oH);
     const side = p.x < 0.5 ? 'left' : 'right';
-    let left = 0, top = 0, rot = 0;
+    let left, top, rot = 0;
     switch (st.pose) {
-        case 'peek': // half outside the screen, at the left or right wall
-            left = side === 'left' ? -w * 0.45 : W - w * 0.55;
-            top = clamp(p.y * H - h / 2, -h * 0.3, H - h * 0.4);
+        case 'peek':
+            left = side === 'left' ? -w * 0.45 : oW - w * 0.55;
+            top = clamp(p.y * oH - h / 2, -h * 0.3, oH - h * 0.4);
             break;
-        case 'lean': // at the wall, tilted a little towards it
-            left = side === 'left' ? -w * 0.06 : W - w * 0.94;
-            top = clamp(p.y * H - h / 2, -h * 0.3, H - h * 0.4);
+        case 'lean':
+            left = side === 'left' ? -w * 0.06 : oW - w * 0.94;
+            top = clamp(p.y * oH - h / 2, -h * 0.3, oH - h * 0.4);
             rot = side === 'left' ? -5 : 5;
             break;
-        case 'pop': // only the top shows above the input bar
-            left = clamp(p.x * W - w / 2, -w * 0.3, W - w * 0.7);
-            top = H - h * 0.32;
+        case 'pop':
+            left = clamp(p.x * oW - w / 2, -w * 0.3, oW - w * 0.7);
+            top = oH - h * 0.32;
             break;
-        default: // 'stand': the input bar hides the lower part
-            left = clamp(p.x * W - w / 2, -w * 0.3, W - w * 0.7);
-            top = H - h * 0.7;
+        default:
+            left = clamp(p.x * oW - w / 2, -w * 0.3, oW - w * 0.7);
+            top = oH - h * 0.7;
     }
-    return { left, top, w, h, rot, side };
+    const cx = oL + left + w / 2, cy = oT + top + h / 2;
+    st.place[kind] = {
+        v: 2,
+        x: clamp((cx - geo.L) / geo.W, -0.5, 1.5),
+        y: clamp((cy - geo.T) / geo.H, -0.5, 1.5),
+        size: clamp(p.size * oH / geo.H, SIZE_MIN, SIZE_MAX),
+        rot: normRot(rot + (p.rot || 0)),
+    };
+    saveSoon();
+    return true;
+}
+
+let saveTimer = 0;
+function saveSoon() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 400);
+}
+
+/** Box of one picture in the layer. At least 40% of it stays on the screen. */
+function boxOf(key, st, f, W, H) {
+    const p = placeNow(key);
+    const { w, h } = sizeOf(p, st, f, H);
+    const cx = clamp(p.x * W, -w * 0.1, W + w * 0.1);
+    const cy = clamp(p.y * H, -h * 0.1, H + h * 0.1);
+    const rot = normRot(p.rot);
+    // Box around the turned picture.
+    const a = rot * Math.PI / 180;
+    const bw = Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a));
+    const bh = Math.abs(w * Math.sin(a)) + Math.abs(h * Math.cos(a));
+    return { left: cx - w / 2, top: cy - h / 2, w, h, cx, cy, rot, bw, bh };
 }
 
 function drawOne(key) {
-    if (!layer || !pieces.has(key)) return;
+    if (!layer || !shown.includes(key)) return;
     const st = stOf(key);
     if (!st) return;
-    const pc = pieces.get(key);
+    const { ek, pinId } = splitPid(key);
     const outfit = outfitOf(key);
-    if (pc.pinId && !outfit) return; // the outfit was deleted
+    if (pinId && !outfit) return; // the outfit was deleted
     const f = entryFor(key);
-    const src = pictureUrl(pc.ek, outfit);
+    const src = pictureUrl(ek, outfit);
     if (f.src !== src) {
         f.src = src;
         f.ar = 0;
         f.img.src = src;
-        f.handle.querySelector('img').src = thumbUrl(pc.ek, outfit);
+        f.handle.querySelector('img').src = thumbUrl(ek, outfit);
     }
-    const W = layer.clientWidth, H = layer.clientHeight;
+    const W = geo?.W || layer.clientWidth, H = geo?.H || layer.clientHeight;
+    const ready = upgradePlace(key, st);
     const b = boxOf(key, st, f, W, H);
-    const showFig = !st.hidden && !f.broken && W > 0 && H > 0;
+    const showFig = ready && !st.hidden && !f.broken && W > 0 && H > 0;
     f.fig.hidden = !showFig;
     f.fig.classList.toggle('is-sticker', st.sticker);
     f.fig.classList.toggle('is-locked', st.locked);
@@ -285,23 +418,25 @@ function drawOne(key) {
         left: `${b.left}px`, top: `${b.top}px`, width: `${b.w}px`, height: `${b.h}px`,
         transform: b.rot ? `rotate(${b.rot}deg)` : '', opacity: String(st.opacity),
     });
-    // Visible part of the picture (some poses are half outside).
-    const vl = clamp(b.left, 0, W), vr = clamp(b.left + b.w, 0, W);
-    const vt = clamp(b.top, 0, H);
-    f.visible = { left: vl, right: vr, top: vt, bottom: clamp(b.top + b.h, 0, H) };
+    f.center = { x: b.cx, y: b.cy, h: b.h, rot: b.rot };
+    // Visible part of the box around the picture.
+    const vl = clamp(b.cx - b.bw / 2, 0, W), vr = clamp(b.cx + b.bw / 2, 0, W);
+    const vt = clamp(b.cy - b.bh / 2, 0, H), vb = clamp(b.cy + b.bh / 2, 0, H);
+    f.visible = { left: vl, right: vr, top: vt, bottom: vb };
+    const side = b.cx < W / 2 ? 'left' : 'right';
     // 🔒 dot: the only touchable spot of a locked picture.
     f.dot.hidden = !(showFig && st.locked);
     f.dot.title = t('stage_locked');
     f.dot.setAttribute('aria-label', t('stage_locked'));
-    f.dot.style.left = `${clamp((b.side === 'left' ? vr - 34 : vl + 6), 4, Math.max(4, W - 34))}px`;
+    f.dot.style.left = `${clamp((side === 'left' ? vr - 34 : vl + 6), 4, Math.max(4, W - 34))}px`;
     f.dot.style.top = `${clamp(vt + 6, 4, Math.max(4, H - 34))}px`;
-    // Hidden: a small tab at the wall brings it back.
+    // Hidden: a small tab at the nearer wall brings it back.
     f.handle.hidden = !st.hidden;
-    f.handle.classList.toggle('is-right', b.side === 'right');
+    f.handle.classList.toggle('is-right', side === 'right');
     f.handle.title = t('stage_show');
     f.handle.setAttribute('aria-label', t('stage_show'));
-    const midY = ['stand', 'pop'].includes(st.pose) ? H * 0.7 : b.top + b.h / 2;
-    f.handle.style.top = `${clamp(midY - 22, 4, Math.max(4, H - 48))}px`;
+    const hb = holes[0];
+    f.handle.style.top = `${clamp(b.cy - 22, 4, Math.max(4, (hb ? hb.t : H) - 48))}px`;
     if (toolsKey === key) placeTools();
 }
 
@@ -312,7 +447,11 @@ function toolsEl() { return layer?.querySelector('.facets-stage-tools'); }
 function closeTools() {
     toolsKey = '';
     toolsEl()?.remove();
+    rotHandle?.remove();
+    rotHandle = null;
 }
+
+const deg = (r) => `${Math.round(normRot(r))}°`;
 
 function openTools(key) {
     const st = stOf(key);
@@ -323,31 +462,74 @@ function openTools(key) {
     const bar = document.createElement('div');
     bar.className = 'facets-stage-tools';
     bar.dataset.key = key;
+    const rot = placeNow(key).rot || 0;
     bar.innerHTML = st.locked
         ? `<button type="button" class="facets-stage-btn" data-stage-act="unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button>
            <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-eye-slash"></i><span>${esc(t('stage_hide'))}</span></button>`
         : `<label class="facets-stage-op" title="${esc(t('stage_opacity'))}"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
              <input type="range" min="${Math.round(OPACITY_MIN * 100)}" max="100" step="1" value="${Math.round(st.opacity * 100)}" data-stage-act="opacity" aria-label="${esc(t('stage_opacity'))}"></label>
+           <div class="facets-stage-op facets-stage-rotrow">
+             <button type="button" class="facets-stage-btn facets-stage-ico" data-stage-act="rot-left" title="${esc(t('stage_rot_left'))}" aria-label="${esc(t('stage_rot_left'))}"><i class="fa-solid fa-rotate-left"></i></button>
+             <input type="range" min="-180" max="180" step="1" value="${Math.round(rot)}" data-stage-act="rot" aria-label="${esc(t('stage_rot'))}">
+             <span class="facets-stage-deg">${esc(deg(rot))}</span>
+             <button type="button" class="facets-stage-btn facets-stage-ico" data-stage-act="rot-right" title="${esc(t('stage_rot_right'))}" aria-label="${esc(t('stage_rot_right'))}"><i class="fa-solid fa-rotate-right"></i></button>
+           </div>
            <button type="button" class="facets-stage-btn" data-stage-act="lock"><i class="fa-solid fa-lock"></i><span>${esc(t('stage_lock'))}</span></button>
            <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-eye-slash"></i><span>${esc(t('stage_hide'))}</span></button>
-           <button type="button" class="facets-stage-btn" data-stage-act="pose" title="${esc(t('stage_pose_next'))}"><i class="fa-solid fa-person"></i><span>${esc(t('stage_pose'))}</span></button>
-           <button type="button" class="facets-stage-btn" data-stage-act="remove" title="${esc(t(pieces.get(key)?.pinId ? 'stage_remove_pin' : 'stage_remove_main'))}"><i class="fa-solid fa-xmark"></i><span>${esc(t('stage_remove'))}</span></button>`;
+           <button type="button" class="facets-stage-btn" data-stage-act="remove" title="${esc(t(splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main'))}"><i class="fa-solid fa-xmark"></i><span>${esc(t('stage_remove'))}</span></button>`;
     layer.appendChild(bar);
+    if (!st.locked) {
+        rotHandle = document.createElement('button');
+        rotHandle.type = 'button';
+        rotHandle.className = 'facets-stage-rot';
+        rotHandle.dataset.key = key;
+        rotHandle.title = t('stage_rot_drag');
+        rotHandle.setAttribute('aria-label', t('stage_rot_drag'));
+        rotHandle.innerHTML = '<i class="fa-solid fa-rotate"></i>';
+        layer.appendChild(rotHandle);
+    }
     placeTools();
+}
+
+/** Show the current turn in the open tool bar. */
+function syncTools() {
+    const bar = toolsEl();
+    if (!bar) return;
+    const rot = placeNow(toolsKey).rot || 0;
+    const range = bar.querySelector('[data-stage-act="rot"]');
+    if (range && document.activeElement !== range) range.value = String(Math.round(rot));
+    const label = bar.querySelector('.facets-stage-deg');
+    if (label) label.textContent = deg(rot);
 }
 
 function placeTools() {
     const bar = toolsEl();
     const f = figures.get(toolsKey);
-    if (!bar || !f?.visible) return;
-    const W = layer.clientWidth, H = layer.clientHeight;
+    if (!bar || !f?.visible || !geo) return;
+    const { W, H } = geo;
     const bw = bar.offsetWidth, bh = bar.offsetHeight;
     const v = f.visible;
     const cx = (v.left + v.right) / 2;
-    let top = v.top - bh - 8;
-    if (top < 4) top = v.top + 8;
-    bar.style.left = `${clamp(cx - bw / 2, 4, Math.max(4, W - bw - 4))}px`;
+    const left = clamp(cx - bw / 2, 4, Math.max(4, W - bw - 4));
+    let top = v.top - bh - 8 - (rotHandle ? 40 : 0);
+    if (top < 4) top = Math.min(v.bottom + 8, H - bh - 4);
+    if (top < 4) top = 4;
+    // Never under the input bar.
+    for (const h of holes) {
+        if (left < h.r && left + bw > h.l && top < h.b && top + bh > h.t) top = Math.max(4, h.t - bh - 6);
+    }
+    bar.style.left = `${left}px`;
     bar.style.top = `${clamp(top, 4, Math.max(4, H - bh - 4))}px`;
+    syncTools();
+    if (rotHandle && f.center) {
+        // Above the top of the picture, turned with it.
+        const a = f.center.rot * Math.PI / 180;
+        const d = f.center.h / 2 + 24;
+        const x = f.center.x + Math.sin(a) * d, y = f.center.y - Math.cos(a) * d;
+        rotHandle.style.left = `${clamp(x - 17, 2, W - 36)}px`;
+        rotHandle.style.top = `${clamp(y - 17, 2, H - 36)}px`;
+        rotHandle.hidden = !!f.fig.hidden;
+    }
 }
 
 function toggleTools(key) {
@@ -356,28 +538,51 @@ function toggleTools(key) {
 
 // ---------- touch and mouse ----------
 
-const dist = () => {
+const two = () => {
     const [a, b] = [...pointers.values()];
-    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+    return a && b ? { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI } : null;
 };
 
+/** Angle from the picture's middle to a point on the screen, 0 = straight up. */
+function angleTo(key, x, y) {
+    const c = figures.get(key)?.center;
+    if (!c || !geo) return 0;
+    return Math.atan2(x - geo.L - c.x, -(y - geo.T - c.y)) * 180 / Math.PI;
+}
+
 function onDown(e) {
+    if (e.button !== undefined && e.button > 0) return;
+    const rot = e.target.closest('.facets-stage-rot');
+    if (rot) {
+        const key = rot.dataset.key;
+        const st = stOf(key);
+        if (!st || st.locked) return;
+        e.preventDefault();
+        try { rot.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+        const start = { ...currentPlace(key) };
+        pointers.clear();
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        gesture = { key, kind: 'rot', start, a0: angleTo(key, e.clientX, e.clientY), moved: false, t0: Date.now() };
+        return;
+    }
     const fig = e.target.closest('.facets-fig');
     if (!fig) return;
     const key = fig.dataset.key;
     const st = stOf(key);
     if (!st || st.locked) return;
-    if (e.button !== undefined && e.button > 0) return;
     e.preventDefault();
     try { fig.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (gesture && gesture.key !== key) { pointers.clear(); gesture = null; }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (!gesture || gesture.key !== key) {
-        gesture = { key, start: { ...placeNow(key) }, x0: e.clientX, y0: e.clientY, moved: false, t0: Date.now(), multi: false, d0: 0 };
+    if (!gesture) {
+        gesture = { key, kind: 'move', start: { ...currentPlace(key) }, x0: e.clientX, y0: e.clientY, moved: false, t0: Date.now(), multi: false };
     }
     if (pointers.size >= 2) {
+        const tw = two();
         gesture.multi = true;
         gesture.start = { ...placeNow(key) };
-        gesture.d0 = dist();
+        gesture.d0 = tw?.d || 0;
+        gesture.a0 = tw?.ang || 0;
     }
     fig.classList.add('is-active');
 }
@@ -387,11 +592,21 @@ function onMove(e) {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     e.preventDefault();
     const key = gesture.key;
+    if (gesture.kind === 'rot') {
+        const a = angleTo(key, e.clientX, e.clientY);
+        gesture.moved = true;
+        setPlace(key, { ...gesture.start, rot: snapRot(gesture.start.rot + a - gesture.a0) });
+        return;
+    }
     if (pointers.size >= 2) {
-        const d = dist();
-        if (gesture.d0 > 0 && d > 0) {
+        const tw = two();
+        if (gesture.d0 > 0 && tw?.d > 0) {
             gesture.moved = true;
-            setPlace(key, { ...gesture.start, size: gesture.start.size * d / gesture.d0 });
+            setPlace(key, {
+                ...gesture.start,
+                size: gesture.start.size * tw.d / gesture.d0,
+                rot: snapRot(gesture.start.rot + tw.ang - gesture.a0),
+            });
         }
         return;
     }
@@ -400,7 +615,7 @@ function onMove(e) {
     if (!gesture.moved && Math.hypot(dx, dy) < 6) return;
     if (!gesture.moved) closeTools();
     gesture.moved = true;
-    const W = layer.clientWidth || 1, H = layer.clientHeight || 1;
+    const W = geo?.W || 1, H = geo?.H || 1;
     setPlace(key, { ...gesture.start, x: gesture.start.x + dx / W, y: gesture.start.y + dy / H });
 }
 
@@ -413,21 +628,36 @@ function onUp(e) {
     if (!g) return;
     figures.get(g.key)?.fig.classList.remove('is-active');
     if (g.moved) save();
-    else if (e.type === 'pointerup' && Date.now() - g.t0 < 600) toggleTools(g.key);
+    else if (g.kind === 'move' && e.type === 'pointerup' && Date.now() - g.t0 < 600) toggleTools(g.key);
 }
 
-let wheelSave = 0;
+// A finger that left without "up" (switching apps, a system gesture) must not keep a picture stuck.
+function dropAll() {
+    if (!gesture) { pointers.clear(); return; }
+    const g = gesture;
+    gesture = null;
+    pointers.clear();
+    figures.get(g.key)?.fig.classList.remove('is-active');
+    if (g.moved) save();
+}
+
 function onWheel(e) {
-    const fig = e.target.closest('.facets-fig');
+    const fig = e.target.closest('.facets-fig, .facets-stage-rot');
     if (!fig) return;
     const key = fig.dataset.key;
     const st = stOf(key);
     if (!st || st.locked) return;
     e.preventDefault();
-    const p = placeNow(key);
-    setPlace(key, { ...p, size: p.size * (e.deltaY < 0 ? 1.06 : 1 / 1.06) });
-    clearTimeout(wheelSave);
-    wheelSave = setTimeout(save, 300);
+    const p = currentPlace(key);
+    // Shift + wheel turns (some browsers send Shift + wheel sideways).
+    const delta = e.deltaY || e.deltaX;
+    if (e.shiftKey || fig.classList.contains('facets-stage-rot')) {
+        setPlace(key, { ...p, rot: snapRot(p.rot + (delta > 0 ? 5 : -5)) });
+        if (toolsKey === key) syncTools();
+    } else {
+        setPlace(key, { ...p, size: p.size * (delta < 0 ? 1.06 : 1 / 1.06) });
+    }
+    saveSoon();
 }
 
 function onClick(e) {
@@ -442,18 +672,16 @@ function onClick(e) {
         case 'unlock': st.locked = false; break;
         case 'hide': st.hidden = true; break;
         case 'show': st.hidden = false; break;
-        case 'pose': {
-            st.pose = POSES[(POSES.indexOf(st.pose) + 1) % POSES.length];
-            save();
-            drawOne(key);
-            if (toolsKey === key) placeTools(); // keep the bar open to try the next pose
+        case 'rot-left': case 'rot-right': {
+            // Keep the bar open to keep turning.
+            turnPiece(key, el.dataset.stageAct === 'rot-right' ? 1 : -1);
             document.dispatchEvent(new CustomEvent('facets:stage'));
             return;
         }
         case 'remove': {
-            const pc = pieces.get(key);
+            const { ek, pinId } = splitPid(key);
             closeTools();
-            if (pc?.pinId) removePin(pc.chatKey, pc.ek, pc.pinId);
+            if (pinId) removePin(currentScene().chatKey, ek, pinId);
             else { st.on = false; save(); }
             applyStage();
             document.dispatchEvent(new CustomEvent('facets:stage'));
@@ -469,18 +697,24 @@ function onClick(e) {
 
 function onInput(e) {
     const el = e.target;
-    if (el.dataset.stageAct !== 'opacity') return;
     const st = stOf(toolsKey);
     if (!st) return;
-    st.opacity = clamp(Number(el.value) / 100, OPACITY_MIN, 1);
-    const f = figures.get(toolsKey);
-    if (f) f.fig.style.opacity = String(st.opacity);
+    if (el.dataset.stageAct === 'opacity') {
+        st.opacity = clamp(Number(el.value) / 100, OPACITY_MIN, 1);
+        const f = figures.get(toolsKey);
+        if (f) f.fig.style.opacity = String(st.opacity);
+    } else if (el.dataset.stageAct === 'rot') {
+        const p = currentPlace(toolsKey);
+        setPlace(toolsKey, { ...p, rot: snapRot(Number(el.value)) });
+        const label = toolsEl()?.querySelector('.facets-stage-deg');
+        if (label) label.textContent = deg(placeNow(toolsKey).rot);
+    }
 }
 
 // A tap anywhere else closes the tool bar.
 function onOutside(e) {
     if (!toolsKey || !layer) return;
-    if (e.target.closest?.('.facets-stage-tools, .facets-stage-dot') || e.target.closest?.('.facets-fig')?.dataset.key === toolsKey) return;
+    if (e.target.closest?.('.facets-stage-tools, .facets-stage-dot, .facets-stage-rot') || e.target.closest?.('.facets-fig')?.dataset.key === toolsKey) return;
     closeTools();
 }
 
@@ -491,7 +725,10 @@ export function initStage() {
     document.addEventListener('focusin', applySoon);
     document.addEventListener('focusout', () => setTimeout(applySoon, 60));
     document.addEventListener('pointerdown', onOutside, true);
+    window.addEventListener('blur', dropAll);
+    window.addEventListener('pagehide', dropAll);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) dropAll(); });
     document.addEventListener('facets:lang', () => { if (toolsKey) openTools(toolsKey); applySoon(); });
 }
 
-export function _stageForTest() { return { figures, layer, toolsKey }; }
+export function _stageForTest() { return { figures, layer, toolsKey, holes, geo }; }

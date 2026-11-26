@@ -6,10 +6,10 @@ import {
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
     addDrawer, renameDrawer, deleteDrawer, timelineOf, deletePoint, tellAgain, muteTell,
     setDrawerKeywords, cleanKeywords, randomOf, setRandom, DEFAULT_IGNORE,
-    removeEntity, moveEntity, unusedFiles, stageOf, POSES,
+    removeEntity, moveEntity, unusedFiles, stageOf,
     pinsOf, addPin, removePin, layoutsOf, saveLayout, loadLayout, renameLayout, deleteLayout, MAX_PINS, MAX_LAYOUTS,
 } from './store.js';
-import { resetPlace, screenKind } from './stage.js';
+import { resetPlace, screenKind, turnPiece, rotOf } from './stage.js';
 import { rollDice } from './auto.js';
 import {
     urlOf, folderFor, readAsDataURL, loadImage, uploadDataURL, deletePath, autoCrop, renderCrop,
@@ -403,18 +403,12 @@ function stageRow(key) {
       </div></div>`;
 }
 
-const POSE_ICON = { stand: 'fa-person', peek: 'fa-eye', pop: 'fa-arrow-up', lean: 'fa-grip-lines-vertical' };
-
 function viewStage() {
     const key = activeKey();
     if (!key) { state.screen = 'wardrobe'; return viewWardrobe(); }
     entityFor(key);
     const st = stageOf(key, true);
     const head = headTitle(`${t('stage_title')} · ${displayName(key)}`);
-    const poses = POSES.map(p => `<button type="button" role="radio" class="facets-pose${st.pose === p ? ' on' : ''}" data-act="stage-pose" data-pose="${p}" aria-checked="${st.pose === p}">
-        <i class="fa-solid ${POSE_ICON[p]}" aria-hidden="true"></i>
-        <span class="facets-pose-text"><b>${esc(t(`pose_${p}`))}</b><small>${esc(t(`pose_${p}_note`))}</small></span>
-      </button>`).join('');
     const sw = (act, on, label, note = '') => `<label class="facets-toggle">
         <span class="facets-toggle-text"><span>${esc(label)}</span>${note ? `<small>${esc(note)}</small>` : ''}</span>
         <input type="checkbox" data-act="${act}"${on ? ' checked' : ''}>
@@ -429,8 +423,12 @@ function viewStage() {
         <div class="facets-stitle facets-stage-head">${esc(t('stage_main_title'))}</div>
         ${notes.join('')}
         <div class="facets-section">
-          <div class="facets-stitle">${esc(t('stage_pose'))}</div>
-          <div class="facets-poses" role="radiogroup">${poses}</div>
+          <div class="facets-turnrow">
+            <span class="facets-turnlabel">${esc(t('stage_rot'))}</span>
+            <button type="button" class="facets-iconbtn" data-act="stage-turn" data-dir="-1" title="${esc(t('stage_rot_left'))}" aria-label="${esc(t('stage_rot_left'))}"><i class="fa-solid fa-rotate-left"></i></button>
+            <span class="facets-turndeg">${Math.round(rotOf(key))}°</span>
+            <button type="button" class="facets-iconbtn" data-act="stage-turn" data-dir="1" title="${esc(t('stage_rot_right'))}" aria-label="${esc(t('stage_rot_right'))}"><i class="fa-solid fa-rotate-right"></i></button>
+          </div>
         </div>
         <div class="facets-section">
           ${sw('stage-sticker', st.sticker, t('stage_sticker'), t('stage_sticker_note'))}
@@ -458,7 +456,7 @@ function pinSection(key) {
         const name = outfitLabel(o, i);
         const icon = (act, on, label, cls) => `<button type="button" class="facets-iconbtn facets-pin-opt${on ? ' on' : ''}" data-act="${act}" data-pin="${esc(pin.id)}" aria-pressed="${on}" title="${esc(label)}" aria-label="${esc(label)}"><i class="fa-solid ${cls}"></i></button>`;
         const tail = pin
-            ? `${icon('pin-sticker', pin.sticker, t('stage_sticker'), 'fa-circle-notch')}${icon('pin-flip', pin.flip, t('stage_flip'), 'fa-arrows-left-right')}
+            ? `${icon('pin-sticker', pin.sticker, t('stage_sticker'), 'fa-circle-notch')}${icon('pin-flip', pin.flip, t('stage_flip'), 'fa-arrows-left-right')}<button type="button" class="facets-iconbtn facets-pin-turn" data-act="pin-turn" data-pin="${esc(pin.id)}" title="${esc(t('stage_rot_right'))}" aria-label="${esc(t('stage_rot_right'))}"><i class="fa-solid fa-rotate-right"></i></button>
                <button type="button" class="facets-btn facets-small" data-act="pin-remove" data-pin="${esc(pin.id)}">${esc(t('stage_remove'))}</button>`
             : `<button type="button" class="facets-btn facets-small" data-act="pin-add" data-id="${esc(o.id)}"${full ? ' disabled' : ''}>${esc(t('pin_add'))}</button>`;
         return `<div class="facets-hist-row facets-pin-row${pin ? ' is-pinned' : ''}">
@@ -1463,9 +1461,14 @@ function onClick(e) {
         }
         case 'settings': state.screen = 'settings'; render(); break;
         case 'stage': state.screen = 'stage'; render(); break;
-        case 'stage-pose': {
-            const st = stageOf(activeKey(), true);
-            if (st && POSES.includes(el.dataset.pose)) { st.pose = el.dataset.pose; save(); applyAllSoon(); }
+        case 'stage-turn': {
+            const key = activeKey();
+            if (key) { stageOf(key, true); turnPiece(key, Number(el.dataset.dir) || 1); applyAllSoon(); }
+            render(); break;
+        }
+        case 'pin-turn': {
+            const key = activeKey();
+            if (key && chatAvailable()) { turnPiece(`${key}\n${el.dataset.pin}`, 1); applyAllSoon(); }
             render(); break;
         }
         case 'stage-show': case 'stage-unlock': {
