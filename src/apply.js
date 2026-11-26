@@ -1,7 +1,7 @@
 // Shows the chosen outfits on avatars and passes look descriptions to the AI.
 // Only reads/changes <img> elements on screen; chat data is never modified.
 
-import { ctx, settings, charKey, personaKey, effectiveOutfit, chatKeyFor, findOutfit } from './store.js';
+import { ctx, settings, charKey, personaKey, effectiveOutfit, chatOnlyOutfit, chatKeyFor, findOutfit } from './store.js';
 import { urlOf } from './images.js';
 
 const PROMPT_KEY = 'facets_appearance';
@@ -213,11 +213,12 @@ export function updatePrompt() {
     const s = settings();
     const scene = currentScene();
     const lines = [];
-    if (s.tellAI && scene.character && !scene.inGroup) {
-        const co = effectiveOutfit(scene.charKey, scene.chatKey);
+    // Only "This chat only" picks are described; a whole-character pick changes the picture only.
+    if (s.tellAI && scene.character && !scene.inGroup && scene.chatKey) {
+        const co = chatOnlyOutfit(scene.charKey, scene.chatKey);
         if (co?.desc?.trim()) lines.push(`${scene.character.name}: ${co.desc.trim()}`);
         if (scene.personaKey) {
-            const po = effectiveOutfit(scene.personaKey, scene.chatKey);
+            const po = chatOnlyOutfit(scene.personaKey, scene.chatKey);
             if (po?.desc?.trim()) lines.push(`${personaName(scene.personaAvatar)}: ${po.desc.trim()}`);
         }
     }

@@ -12,7 +12,7 @@ const DEFAULTS = Object.freeze({
     showInList: true,
     tellAI: false, // off until the user turns it on
     backupImages: true,
-    // key -> { name, outfits: Outfit[], global: outfitId|null }
+    // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null }
     // key is "char:<avatar file>" or "persona:<avatar file>"
     entities: {},
     // "<character avatar>::<chat file name>" -> { entityKey: outfitId | DEFAULT_MARK }
@@ -23,7 +23,8 @@ const DEFAULTS = Object.freeze({
 
 /**
  * @typedef {{ id: string, name: string, desc: string, orig: string, sq: string,
- *   pair: { key: string, id: string } | null }} Outfit
+ *   pair: { key: string, id: string } | null, drawers: string[] }} Outfit
+ * @typedef {{ id: string, name: string }} Drawer
  */
 
 let ctxGetter = () => globalThis.SillyTavern?.getContext?.();
@@ -51,10 +52,16 @@ export function migrate(s) {
     for (const e of Object.values(s.entities)) {
         if (!Array.isArray(e.outfits)) e.outfits = [];
         if (e.global === undefined) e.global = null;
+        if (!Array.isArray(e.drawers)) e.drawers = [];
+        e.drawers = e.drawers.filter(d => d && typeof d.id === 'string');
+        for (const d of e.drawers) if (typeof d.name !== 'string') d.name = '';
+        const drawerIds = new Set(e.drawers.map(d => d.id));
         for (const o of e.outfits) {
             if (o.pair === undefined) o.pair = null;
             if (typeof o.desc !== 'string') o.desc = '';
             if (typeof o.name !== 'string') o.name = '';
+            if (!Array.isArray(o.drawers)) o.drawers = [];
+            o.drawers = [...new Set(o.drawers.filter(id => drawerIds.has(id)))];
         }
     }
     return s;
@@ -103,7 +110,7 @@ export function getEntity(key, create = false, name = '') {
     const s = settings();
     let e = s.entities[key];
     if (!e && create) {
-        e = s.entities[key] = { name, outfits: [], global: null };
+        e = s.entities[key] = { name, outfits: [], drawers: [], global: null };
     }
     if (e && name && e.name !== name) e.name = name;
     return e || null;
@@ -136,6 +143,38 @@ export function effectiveOutfit(entityKey, chatKey) {
         if (o) return o;
     }
     return findOutfit(entityKey, e.global);
+}
+
+/**
+ * Outfit picked with "This chat only" (null if the chat follows "whole character" or shows the default).
+ * Only these are described to the AI: a whole-character pick changes the picture only.
+ */
+export function chatOnlyOutfit(entityKey, chatKey) {
+    const c = chatChoice(chatKey, entityKey);
+    if (!c || c === DEFAULT_MARK) return null;
+    return findOutfit(entityKey, c);
+}
+
+// ---- Drawers (groups of outfits; one outfit can be in several drawers) ----
+
+export function addDrawer(entityKey, name) {
+    const e = getEntity(entityKey, true);
+    const d = { id: newId(), name: String(name || '').trim().slice(0, 40) };
+    e.drawers.push(d);
+    return d;
+}
+
+export function renameDrawer(entityKey, drawerId, name) {
+    const d = getEntity(entityKey)?.drawers.find(x => x.id === drawerId);
+    if (d) d.name = String(name || '').trim().slice(0, 40);
+}
+
+/** Removes the drawer only. The outfits inside stay in the wardrobe. */
+export function deleteDrawer(entityKey, drawerId) {
+    const e = getEntity(entityKey);
+    if (!e) return;
+    e.drawers = e.drawers.filter(d => d.id !== drawerId);
+    for (const o of e.outfits) o.drawers = o.drawers.filter(id => id !== drawerId);
 }
 
 /**

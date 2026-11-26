@@ -615,3 +615,40 @@ label.facets-btn { margin: 0; }
 .facets-panel-version { font-size: 12px; opacity: 0.7; }
 
 html.facets-open body { overscroll-behavior: none; }
+
+/* ---------- drawers ---------- */
+.facets-chips {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+}
+.facets-chips::-webkit-scrollbar { display: none; }
+.facets-chips-wrap { flex-wrap: wrap; overflow: visible; margin: 0; }
+.facets-chip {
+    flex: 0 0 auto;
+    max-width: 160px;
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--facets-border);
+    border-radius: 17px;
+    background: var(--facets-surface);
+    color: var(--facets-muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.facets-chip:hover { background: var(--facets-surface2); }
+.facets-chip.on { color: var(--facets-text); background: var(--facets-surface2); box-shadow: inset 0 0 0 1.5px var(--facets-accent); border-color: var(--facets-accent); }
+.facets-drawer-row { display: flex; gap: 8px; align-items: center; }
+.facets-drawer-row .facets-input { flex: 1 1 auto; min-width: 0; }
+.facets-drawer-count { flex: 0 0 auto; font-size: 13px; color: var(--facets-muted); white-space: nowrap; }
+.facets-iconbtn.facets-danger-icon { color: var(--facets-danger); }

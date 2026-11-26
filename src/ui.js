@@ -4,6 +4,7 @@ import { t, LANGUAGES, setLanguage, getLanguage } from './i18n.js';
 import {
     ctx, settings, save, chooseLang, getEntity, findOutfit, choose, chatChoice, effectiveOutfit,
     forgetOutfit, setPair, newId, charKey, personaKey, isCharKey, avatarOfKey, DEFAULT_MARK,
+    addDrawer, renameDrawer, deleteDrawer,
 } from './store.js';
 import {
     urlOf, folderFor, readAsDataURL, loadImage, uploadDataURL, deletePath, autoCrop, renderCrop,
@@ -19,8 +20,9 @@ export function setVersion(v) { VERSION = v; }
 
 const state = {
     open: false,
-    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair
+    screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers
     tab: 'char',
+    drawer: '', // drawer tab shown in the wardrobe ('' = all)
     fromSettings: false,
     scope: 'chat',
     pick: { char: '', persona: '' }, // chosen entity when opened from settings
@@ -90,6 +92,16 @@ function scopeNow() {
     return chatAvailable() ? state.scope : 'all';
 }
 
+function drawerLabel(d, i) {
+    return d?.name?.trim() || t('drawer_n', { n: i + 1 });
+}
+
+/** The drawer tab in use, or '' if it no longer exists. */
+function currentDrawer(e) {
+    if (state.drawer && !e.drawers.some(d => d.id === state.drawer)) state.drawer = '';
+    return state.drawer;
+}
+
 function outfitLabel(o, i) {
     return o?.name?.trim() || t('outfit_n', { n: i + 1 });
 }
@@ -103,6 +115,7 @@ export function openWardrobe({ fromSettings = false } = {}) {
     state.screen = 'wardrobe';
     state.editId = null;
     state.draft = null;
+    state.drawer = '';
     if (!chatAvailable()) state.scope = 'all';
     else state.scope = 'chat';
     root.hidden = false;
@@ -163,6 +176,7 @@ function back() {
             if (state.crop?.mode === 'add') { finishQueueAuto().then(render); return; }
             state.screen = state.crop?.mode === 'add' ? 'organize' : 'edit'; state.crop = null; break;
         case 'pair': state.screen = 'edit'; break;
+        case 'drawers': state.screen = 'organize'; break;
         case 'settings': case 'organize': state.screen = 'wardrobe'; break;
         default: closeWardrobe(); return;
     }
@@ -183,6 +197,7 @@ function render() {
         case 'crop': [head, body, foot] = viewCrop(); break;
         case 'settings': [head, body, foot] = viewSettings(); break;
         case 'pair': [head, body, foot] = viewPair(); break;
+        case 'drawers': [head, body, foot] = viewDrawers(); break;
     }
     const lang = getLanguage();
     root.innerHTML = `
@@ -260,11 +275,17 @@ function viewWardrobe() {
     } else {
         status = t('status_all', { b: globalName });
     }
+    const drawer = currentDrawer(e);
+    const visible = e.outfits.map((o, i) => [o, i]).filter(([o]) => !drawer || o.drawers.includes(drawer));
     const tiles = [tileHtml({ key, outfit: null, selected: !shown, mode: 'wear' })]
-        .concat(e.outfits.map((o, i) => tileHtml({ key, outfit: o, index: i, selected: shown?.id === o.id, mode: 'wear' })));
+        .concat(visible.map(([o, i]) => tileHtml({ key, outfit: o, index: i, selected: shown?.id === o.id, mode: 'wear' })));
     let body = `<div class="facets-status" title="${esc(status)}">${esc(status)}</div>
         <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}</div>
+        ${drawerChips(e, drawer)}
         <div class="facets-grid">${tiles.join('')}</div>`;
+    if (e.outfits.length && drawer && !visible.length) {
+        body += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-body">${esc(t('drawer_empty'))}</div></div>`;
+    }
     if (!e.outfits.length) {
         body += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-title">${esc(t('empty_title'))}</div><div class="facets-empty-body">${esc(t('empty_body'))}</div></div>`;
     }
@@ -285,6 +306,15 @@ function viewWardrobe() {
         <button type="button" class="facets-btn facets-primary" data-act="organize" title="${esc(t('organize'))}">${esc(t('organize'))}</button>
       </div>`;
     return [head, body, foot];
+}
+
+/** Drawer tabs above the wardrobe grid (only when the entity has drawers). */
+function drawerChips(e, drawer) {
+    if (!e.drawers.length) return '';
+    const chip = (id, label) => `<button type="button" class="facets-chip${drawer === id ? ' on' : ''}" data-act="drawer" data-drawer="${esc(id)}" aria-pressed="${drawer === id}" title="${esc(label)}">${esc(label)}</button>`;
+    return `<div class="facets-chips" role="toolbar" aria-label="${esc(t('drawers'))}">
+        ${chip('', t('drawer_all'))}${e.drawers.map((d, i) => chip(d.id, drawerLabel(d, i))).join('')}
+      </div>`;
 }
 
 function addButton() {
@@ -328,7 +358,34 @@ function viewOrganize() {
         <input type="file" accept="image/*" multiple class="facets-file" data-act="add-files" hidden>
       </label>`);
     const body = `<div class="facets-grid facets-organize">${tiles.join('')}</div>`;
-    const foot = `<div class="facets-row">${addButton()}<button type="button" class="facets-btn facets-primary" data-act="done">${esc(t('done'))}</button></div>`;
+    const foot = `<div class="facets-row">${addButton()}
+        <button type="button" class="facets-btn" data-act="drawers" title="${esc(t('drawers'))}"><i class="fa-solid fa-box-archive"></i><span>${esc(t('drawers'))}</span></button>
+        <button type="button" class="facets-btn facets-primary" data-act="done">${esc(t('done'))}</button></div>`;
+    return [head, body, foot];
+}
+
+function viewDrawers() {
+    const key = activeKey();
+    const head = headTitle(`${t('drawers')} · ${displayName(key)}`);
+    if (!key) return [head, emptyNote('no_character'), ''];
+    const e = entityFor(key);
+    const rows = e.drawers.map((d, i) => {
+        const n = e.outfits.filter(o => o.drawers.includes(d.id)).length;
+        return `<div class="facets-drawer-row">
+            <input type="text" class="facets-input" data-drawer-name="${esc(d.id)}" maxlength="40" value="${esc(d.name)}" placeholder="${esc(drawerLabel(d, i))}" aria-label="${esc(t('drawer_name'))}" autocomplete="off">
+            <span class="facets-drawer-count" title="${esc(t('drawer_count', { n }))}">${esc(t('drawer_count', { n }))}</span>
+            <button type="button" class="facets-iconbtn facets-danger-icon" data-act="drawer-delete" data-id="${esc(d.id)}" title="${esc(t('drawer_delete'))}" aria-label="${esc(t('drawer_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
+          </div>`;
+    }).join('');
+    const body = `<div class="facets-stack">
+        ${rows || `<div class="facets-empty facets-empty-inline"><div class="facets-empty-body">${esc(t('drawer_none'))}</div></div>`}
+        <div class="facets-drawer-row">
+          <input type="text" class="facets-input facets-drawer-new" maxlength="40" placeholder="${esc(t('drawer_new_ph'))}" aria-label="${esc(t('drawer_new_ph'))}" autocomplete="off">
+          <button type="button" class="facets-btn facets-small" data-act="drawer-add">${esc(t('drawer_add'))}</button>
+        </div>
+        <div class="facets-note">${esc(t('drawer_hint'))}</div>
+      </div>`;
+    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="drawers-done">${esc(t('done'))}</button></div>`;
     return [head, body, foot];
 }
 
@@ -336,7 +393,8 @@ function viewEdit() {
     const key = activeKey();
     const o = findOutfit(key, state.editId);
     if (!o) { state.screen = 'organize'; return viewOrganize(); }
-    if (!state.draft) state.draft = { name: o.name, desc: o.desc };
+    if (!state.draft) state.draft = { name: o.name, desc: o.desc, drawers: [...o.drawers] };
+    const e = getEntity(key);
     const head = headTitle(t('edit_outfit'));
     const pair = o.pair && findOutfit(o.pair.key, o.pair.id);
     const pairIdx = pair ? getEntity(o.pair.key).outfits.indexOf(pair) : 0;
@@ -358,6 +416,15 @@ function viewEdit() {
           <span class="facets-flabel">${esc(t('desc_label'))} <small>${esc(t('desc_note'))}</small></span>
           <textarea class="facets-input facets-textarea" data-field="desc" rows="3" maxlength="1000" placeholder="${esc(t('desc_ph'))}">${esc(state.draft.desc)}</textarea>
         </label>
+        <div class="facets-field">
+          <span class="facets-flabel">${esc(t('drawers'))} <small>${esc(t('drawer_multi_note'))}</small></span>
+          ${e.drawers.length
+              ? `<div class="facets-chips facets-chips-wrap">${e.drawers.map((d, i) => {
+                  const on = state.draft.drawers.includes(d.id);
+                  return `<button type="button" class="facets-chip${on ? ' on' : ''}" data-act="edit-drawer" data-id="${esc(d.id)}" aria-pressed="${on}" title="${esc(drawerLabel(d, i))}">${on ? '<i class="fa-solid fa-check"></i> ' : ''}${esc(drawerLabel(d, i))}</button>`;
+              }).join('')}</div>`
+              : `<div class="facets-note">${esc(t('drawer_none_edit'))}</div>`}
+        </div>
         <div class="facets-field">
           <span class="facets-flabel">${esc(t('pair_label'))}</span>
           <div class="facets-pair">
@@ -580,7 +647,9 @@ async function addFiles(files) {
     await withBusy(async () => { items = await readPicked([...files]); });
     if (!items.length) return;
     const from = state.screen === 'wardrobe' ? 'wardrobe' : 'organize';
-    state.crop = { img: items[0].img, crop: freshCrop(items[0].img), mode: 'add', queue: { key, items, index: 0, added: 0, from } };
+    // Added from a drawer tab in the wardrobe: the new outfits go into that drawer.
+    const drawer = from === 'wardrobe' ? state.drawer : '';
+    state.crop = { img: items[0].img, crop: freshCrop(items[0].img), mode: 'add', queue: { key, items, index: 0, added: 0, from, drawer } };
     state.screen = 'crop';
     render();
 }
@@ -597,13 +666,14 @@ async function replaceImage(file) {
     render();
 }
 
-async function uploadNewOutfit(key, item, crop) {
+async function uploadNewOutfit(key, item, crop, drawer = '') {
     const e = entityFor(key);
     const id = newId();
     const orig = await uploadDataURL(item.data, folderFor(key), id);
     try {
         const sq = await uploadDataURL(renderCrop(item.img, crop), folderFor(key), `${id}_sq`);
-        e.outfits.push({ id, name: item.name, desc: '', orig, sq, crop: { ...crop }, pair: null });
+        const drawers = drawer && e.drawers.some(d => d.id === drawer) ? [drawer] : [];
+        e.outfits.push({ id, name: item.name, desc: '', orig, sq, crop: { ...crop }, pair: null, drawers });
         save();
     } catch (err) {
         await deletePath(orig);
@@ -619,7 +689,7 @@ async function queueStep(useCrop) {
     const item = q.items[q.index];
     await withBusy(async () => {
         try {
-            await uploadNewOutfit(q.key, item, useCrop || freshCrop(item.img));
+            await uploadNewOutfit(q.key, item, useCrop || freshCrop(item.img), q.drawer);
             q.added++;
         } catch (err) {
             console.error('[Facets]', err);
@@ -643,7 +713,7 @@ async function finishQueueAuto() {
     await withBusy(async () => {
         while (q.index < q.items.length) {
             const item = q.items[q.index];
-            try { await uploadNewOutfit(q.key, item, freshCrop(item.img)); q.added++; } catch (err) {
+            try { await uploadNewOutfit(q.key, item, freshCrop(item.img), q.drawer); q.added++; } catch (err) {
                 console.error('[Facets]', err);
                 toast('error', t('upload_failed', { name: item.fileName || item.name }));
             }
@@ -910,7 +980,19 @@ function onClick(e) {
     switch (act) {
         case 'close': requestClose(); break;
         case 'back': back(); break;
-        case 'tab': state.tab = el.dataset.tab; state.screen = 'wardrobe'; render(); break;
+        case 'tab': state.tab = el.dataset.tab; state.drawer = ''; state.screen = 'wardrobe'; render(); break;
+        case 'drawer': state.drawer = el.dataset.drawer || ''; render(); break;
+        case 'drawers': state.screen = 'drawers'; render(); break;
+        case 'drawers-done': state.screen = 'organize'; render(); break;
+        case 'drawer-add': addDrawerFromInput(); break;
+        case 'drawer-delete': removeDrawer(el.dataset.id); break;
+        case 'edit-drawer': {
+            if (!state.draft) break;
+            const id = el.dataset.id;
+            const list = state.draft.drawers;
+            state.draft.drawers = list.includes(id) ? list.filter(x => x !== id) : list.concat(id);
+            render(); break;
+        }
         case 'settings': state.screen = 'settings'; render(); break;
         case 'scope': state.scope = el.dataset.scope; render(); break;
         case 'wear': wear(el.dataset.id); break;
@@ -937,6 +1019,8 @@ function onClick(e) {
             if (o && state.draft) {
                 o.name = state.draft.name.trim();
                 o.desc = state.draft.desc.trim();
+                const ids = new Set((getEntity(activeKey())?.drawers || []).map(d => d.id));
+                o.drawers = (state.draft.drawers || []).filter(id => ids.has(id));
                 save();
                 applyAllSoon();
                 toast('success', t('saved'));
@@ -948,6 +1032,29 @@ function onClick(e) {
         case 'backup': withBusy(() => exportBackup(toast)); break;
         case 'cleanup': runCleanup(); break;
     }
+}
+
+function addDrawerFromInput() {
+    const key = activeKey();
+    const input = root.querySelector('.facets-drawer-new');
+    if (!key || !input) return;
+    // An empty name is fine: it shows as "Drawer N" until renamed.
+    addDrawer(key, input.value);
+    save();
+    render();
+    root.querySelector('.facets-drawer-new')?.focus();
+}
+
+async function removeDrawer(id) {
+    const key = activeKey();
+    const e = getEntity(key);
+    const i = e?.drawers.findIndex(d => d.id === id) ?? -1;
+    if (i < 0) return;
+    if (!(await confirmBox(t('confirm_drawer_delete', { name: drawerLabel(e.drawers[i], i) }), t('delete')))) return;
+    deleteDrawer(key, id);
+    if (state.drawer === id) state.drawer = '';
+    save();
+    render();
 }
 
 async function runCleanup() {
@@ -962,6 +1069,11 @@ async function runCleanup() {
 function onChange(e) {
     const el = e.target;
     const act = el.dataset.act;
+    if (el.dataset.drawerName) {
+        renameDrawer(activeKey(), el.dataset.drawerName, el.value);
+        save();
+        return;
+    }
     if (el.dataset.setting) {
         settings()[el.dataset.setting] = el.checked;
         save();
@@ -971,6 +1083,7 @@ function onChange(e) {
     switch (act) {
         case 'entity':
             if (state.tab === 'char') state.pick.char = el.value; else state.pick.persona = el.value;
+            state.drawer = '';
             render(); break;
         case 'pair-target': state.pairTarget = el.value; render(); break;
         case 'lang':
@@ -1004,6 +1117,8 @@ function onInput(e) {
 document.addEventListener('keydown', (e) => {
     if (!state.open || (e.key !== 'Enter' && e.key !== ' ')) return;
     const el = e.target;
+    if (e.key === 'Enter' && el?.classList?.contains('facets-drawer-new')) { e.preventDefault(); addDrawerFromInput(); return; }
+    if (e.key === 'Enter' && el?.dataset?.drawerName) { e.preventDefault(); el.blur(); return; }
     if (!root?.contains(el) || el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return;
     if (el.getAttribute('role') === 'button') { e.preventDefault(); el.click(); }
 });

@@ -14,7 +14,7 @@ import {
 } from './src/apply.js';
 import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender } from './src/ui.js';
 
-export const VERSION = '0.1.3';
+export const VERSION = '0.2.0';
 setVersion(VERSION);
 
 function langOptions() {
