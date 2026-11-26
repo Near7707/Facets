@@ -299,6 +299,9 @@ export function tellStatus(entityKey, chatKey, skipLast = false) {
 let pendingGen = '';
 export function setPendingGeneration(type) { pendingGen = String(type || ''); }
 
+// How many messages from the end the "just changed" note goes.
+const UPDATE_DEPTH = 2;
+
 /** @param {string} [genType] SillyTavern's generation type ("swipe", "regenerate", "continue", …) */
 export function updatePrompt(genType = pendingGen) {
     const c = ctx();
@@ -325,8 +328,12 @@ export function updatePrompt(genType = pendingGen) {
           + '(This is how they look now; the look has just changed. Do not write a scene of changing clothes. '
           + 'Mention the look only when it matters to the scene. If the story has since shown a different look, follow the story.)';
     }
-    // 0 = in prompt (after the story string), depth 0, no world-info scan, system role.
-    c.setExtensionPrompt(PROMPT_KEY, text, 0, 0, false, 0);
+    // "Always" text stays fixed, so it sits high in the prompt (0 = after the story string).
+    // The short "just changed" note comes and goes, so it goes into the chat near the end
+    // (1 = in chat, depth 2) to keep the cached part of the prompt unchanged.
+    // No world-info scan, system role.
+    const inChat = !!s.tellCount;
+    c.setExtensionPrompt(PROMPT_KEY, text, inChat ? 1 : 0, inChat ? UPDATE_DEPTH : 0, false, 0);
 }
 
 /** After SillyTavern opens its zoomed avatar, show the outfit's full picture instead. */
