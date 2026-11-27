@@ -1798,3 +1798,178 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-stage.facets-stage-ft.facets-stage-t-diary.is-light :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) { --facets-bg: #fffdf9; --facets-text: #3b2f40; --facets-surface2: #fffdf9; --facets-border: #ddd0c4; --facets-accent: #e0568a; --ft-icon: #3b2f40; }
 .facets-stage.facets-stage-ft.facets-stage-t-diary.is-dark :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) { --facets-bg: #2b2528; --facets-text: #f3e9e4; --facets-surface2: #2f292c; --facets-border: #4a3f43; --facets-accent: #ff9ec0; --ft-icon: #e8d9de; }
 .facets-stage-t-clean .facets-stage-tools, .facets-stage-t-diary .facets-stage-tools { box-shadow: 0 4px 14px rgba(40, 30, 50, 0.18); }
+
+/* ================= 0.9.6 polish =================
+   Labels over the cards, the worn outfit's name in big letters, the outfits in one card,
+   each outfit as a small card with its name inside, a name tag, two-colour photocard icons. */
+
+/* small labels (NOW WEARING, MY CLOSET, PHOTO BOOTH) — each theme decorates them */
+.facets-kicker { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.facets-kicker span { font-size: 10.5px; font-weight: 800; letter-spacing: 0.16em; line-height: 1.3; color: var(--facets-muted); white-space: nowrap; }
+.facets-sheet.facets-tst .facets-kicker span { color: var(--facets-accent); }
+.facets-t-holo .facets-kicker::before {
+    content: ''; flex: 0 0 auto; width: 11px; height: 11px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23ff8fc8'/%3E%3Cstop offset='1' stop-color='%23a98bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23g)' d='M12 2l1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.facets-t-holo .facets-kicker span { background: linear-gradient(90deg, #d9477a, #9a6ae0); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.facets-t-holo.is-dark .facets-kicker span { background-image: linear-gradient(90deg, #ffa3c8, #c9b2ff); }
+.facets-t-clean .facets-kicker::before { content: ''; flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: var(--facets-accent); }
+.facets-t-clean .facets-kicker span { font-weight: 700; }
+.facets-t-diary .facets-kicker span { display: inline-block; font-size: 10px; letter-spacing: 0.14em; color: var(--facets-accent); border: 1.5px solid var(--ft-stamp, #e88aae); border-radius: 4px; padding: 2px 6px 1px; background: var(--facets-surface); transform: rotate(-2deg); }
+.facets-t-diary.is-dark .facets-kicker span { --ft-stamp: #a8577a; }
+
+/* little count chip (4 outfits, 2 open · 4 soon) */
+.facets-count { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: var(--facets-muted); background: var(--ft-chip, var(--facets-surface2)); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+.facets-t-holo.is-light { --ft-chip: #f3e9fd; }
+.facets-t-holo.is-dark { --ft-chip: rgba(255, 255, 255, 0.08); }
+.facets-t-clean.is-light { --ft-chip: #f4eff8; }
+.facets-t-clean.is-dark { --ft-chip: #2a2630; }
+.facets-t-diary.is-light { --ft-chip: #fdf0e3; }
+.facets-t-diary.is-dark { --ft-chip: #352d30; }
+
+/* name tag next to [Character | Me] */
+.facets-whorow { justify-content: space-between; }
+.facets-namechip { flex: 0 1 auto; min-width: 0; max-width: 62%; display: flex; align-items: center; gap: 8px; padding: 3px 12px 3px 3px; border: 1px solid var(--facets-border); border-radius: 999px; background: var(--facets-surface); box-sizing: border-box; }
+.facets-namechip .facets-booth-who { flex: 0 1 auto; font-size: 15px; font-weight: 800; letter-spacing: -0.02em; color: var(--facets-text); }
+.facets-namechip-av { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--facets-surface2); display: block; box-sizing: border-box; }
+.facets-namechip-av img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; -webkit-user-drag: none; }
+.facets-namechip-av.broken img { visibility: hidden; }
+.facets-namechip.has-select { flex: 1 1 auto; max-width: none; padding-right: 3px; }
+.facets-root .facets-namechip select.facets-select { flex: 1 1 auto; height: 30px; border: 0; background-color: transparent; padding-left: 2px; font-weight: 700; }
+.facets-sheet.facets-t-holo .facets-namechip { border-color: var(--ft-edge); box-shadow: var(--ft-card-sh); }
+.facets-sheet.facets-t-holo .facets-namechip-av { border: 2px solid transparent; background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box; width: 30px; height: 30px; }
+.facets-sheet.facets-t-clean .facets-namechip-av { box-shadow: 0 0 0 1px var(--facets-border); }
+.facets-sheet.facets-t-diary .facets-namechip { border: 1.5px dashed #e0b9c8; border-radius: 8px; padding-left: 4px; transform: rotate(-1.5deg); box-shadow: 0 2px 0 #efe4d8; }
+.facets-sheet.facets-t-diary.is-dark .facets-namechip { border-color: #7a4a5e; box-shadow: none; }
+.facets-sheet.facets-t-diary .facets-namechip-av { box-shadow: 0 0 0 2px var(--facets-surface), 0 0 0 3px var(--facets-border); }
+
+/* the "now wearing" card */
+.facets-nowcard { position: relative; }
+.facets-nowtop { display: flex; align-items: flex-start; gap: 10px; margin: 0 2px; }
+.facets-nowtext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.facets-nowname { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; color: var(--facets-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-nowsub { font-size: 12px; color: var(--facets-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-nowbtns { flex: 0 0 auto; display: flex; gap: 6px; padding-top: 2px; }
+.facets-t-diary .facets-nowname span { padding: 0 3px; background: linear-gradient(transparent 60%, var(--ft-mark) 60%); }
+.facets-t-diary .facets-nowcard::before { content: ''; position: absolute; top: -9px; left: 50%; width: 64px; height: 16px; margin-left: -32px; background: rgba(255, 208, 226, 0.85); transform: rotate(-4deg); pointer-events: none; }
+.facets-t-diary.is-dark .facets-nowcard::before { opacity: 0.55; }
+.facets-t-diary .facets-nowcard .facets-sumline { border-top-style: dashed; }
+
+/* MY CLOSET card */
+.facets-sheet .facets-closet { margin: 0 0 12px; padding: 12px 12px 14px; gap: 0; }
+.facets-closet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 11px; }
+.facets-closet .facets-chips { margin: 0 0 10px; }
+.facets-closet .facets-empty-inline { margin-top: 12px; }
+.facets-sheet.facets-ft .facets-closet { border-radius: 22px; }
+.facets-sheet.facets-t-diary .facets-closet { background: radial-gradient(circle, var(--ft-dot, #f1e8de) 1px, transparent 1.4px) 0 0 / 14px 14px, var(--facets-surface); }
+.facets-t-diary.is-dark { --ft-dot: rgba(255, 255, 255, 0.05); }
+
+/* each outfit is a small card with its name inside */
+.facets-grid { gap: 12px 10px; }
+@media (max-width: 600px) { .facets-grid { gap: 12px 10px; } }
+.facets-root .facets-tile { padding: 4px 4px 0; border: 1px solid var(--facets-border); border-radius: calc(var(--facets-r) + 4px); background: var(--facets-surface); box-sizing: border-box; }
+.facets-root .facets-thumb, .facets-sheet.facets-ft .facets-thumb, .facets-sheet.facets-ft .facets-tile.on .facets-thumb { border: 0; border-radius: var(--facets-r); background: var(--facets-surface2) repeating-conic-gradient(var(--facets-surface) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.facets-root .facets-tile.on { border-color: var(--facets-accent); box-shadow: inset 0 0 0 1px var(--facets-accent); }
+.facets-root .facets-label { margin: 0; padding: 5px 2px 6px; font-size: 12.5px; font-weight: 600; color: var(--facets-text); }
+.facets-root .facets-badge { top: 8px; left: 8px; }
+.facets-root .facets-check { top: 8px; right: 8px; width: 22px; height: 22px; }
+.facets-root .facets-ring { bottom: 36px; right: 8px; }
+.facets-root .facets-pen { bottom: 36px; left: 8px; }
+.facets-root .facets-tile.facets-add { border-style: dashed; border-width: 1.5px; background: transparent; box-shadow: none; }
+.facets-root .facets-add .facets-thumb { background: transparent; }
+.facets-add-plus { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--facets-surface2); color: var(--facets-accent); font-size: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.facets-root .facets-add .facets-label { color: var(--facets-muted); font-weight: 700; }
+
+/* Holo: glass cards, a holo frame and a tiny sparkle on the worn one */
+.facets-t-holo.is-light { --ft-tile: rgba(255, 255, 255, 0.92); --ft-tile-b: #ffffff; --ft-tile-sh: 0 4px 12px rgba(140, 90, 200, 0.1); }
+.facets-t-holo.is-dark { --ft-tile: rgba(255, 255, 255, 0.06); --ft-tile-b: rgba(255, 255, 255, 0.1); --ft-tile-sh: none; }
+.facets-sheet.facets-t-holo .facets-tile { padding: 5px 5px 0; border: 1px solid var(--ft-tile-b); border-radius: 17px; background: var(--ft-tile); box-shadow: var(--ft-tile-sh); }
+.facets-sheet.facets-t-holo .facets-thumb { border-radius: 13px; }
+.facets-sheet.facets-t-holo .facets-tile.on { padding: 4px 4px 0; border: 2px solid transparent; background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box; box-shadow: 0 6px 16px rgba(217, 71, 122, 0.2); }
+.facets-sheet.facets-t-holo .facets-tile.on::after {
+    content: ''; position: absolute; top: -8px; left: -6px; width: 16px; height: 16px; pointer-events: none;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23ff8fc8'/%3E%3Cstop offset='1' stop-color='%23a98bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23g)' d='M12 2l1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.facets-sheet.facets-t-holo .facets-check { background: #ffffff; color: #d9477a; box-shadow: 0 2px 6px rgba(217, 71, 122, 0.3); }
+.facets-sheet.facets-t-holo.is-dark .facets-check { background: #ffa3c8; color: #2a1020; }
+.facets-sheet.facets-t-holo .facets-tile.facets-add { border-color: #c7b3db; background: rgba(255, 255, 255, 0.35); }
+.facets-sheet.facets-t-holo.is-dark .facets-tile.facets-add { border-color: rgba(255, 255, 255, 0.2); background: transparent; }
+
+/* Clean: white cards, a pink frame on the worn one */
+.facets-sheet.facets-t-clean .facets-tile { border-color: var(--ft-edge); border-radius: 13px; background: var(--facets-surface2); }
+.facets-sheet.facets-t-clean .facets-thumb { border-radius: 10px; }
+.facets-sheet.facets-t-clean .facets-tile.on { padding: 3px 3px 0; border: 2px solid var(--facets-accent); box-shadow: 0 4px 10px rgba(217, 71, 122, 0.12); }
+.facets-sheet.facets-t-clean .facets-tile.facets-add { border-color: #d6cde0; background: transparent; }
+.facets-sheet.facets-t-clean.is-dark .facets-tile.facets-add { border-color: #4a4352; }
+
+/* Diary: polaroids, slightly tilted, with tape; the worn one gets a heart sticker */
+.facets-sheet.facets-t-diary.is-light { --ft-tile: #ffffff; --ft-tile-b: #eadfd3; --ft-tile-sh: 0 2px 5px rgba(120, 90, 70, 0.12); }
+.facets-sheet.facets-t-diary.is-dark { --ft-tile: #2f292c; --ft-tile-b: #4a3f43; --ft-tile-sh: none; }
+.facets-sheet.facets-t-diary .facets-tile { padding: 5px 5px 0; border: 1px solid var(--ft-tile-b); border-radius: 3px; background: var(--ft-tile); box-shadow: var(--ft-tile-sh); }
+.facets-sheet.facets-t-diary .facets-thumb { border-radius: 2px; }
+.facets-sheet.facets-t-diary .facets-tile.on { border: 1.5px solid #e07aa2; box-shadow: 0 3px 8px rgba(216, 74, 128, 0.18); }
+.facets-t-diary .facets-grid:not(.facets-organize) .facets-tile:nth-child(4n+1) { transform: rotate(-2deg); }
+.facets-t-diary .facets-grid:not(.facets-organize) .facets-tile:nth-child(4n+2) { transform: rotate(1.5deg); }
+.facets-t-diary .facets-grid:not(.facets-organize) .facets-tile:nth-child(4n+3) { transform: rotate(-1deg); }
+.facets-t-diary .facets-grid:not(.facets-organize) .facets-tile:nth-child(4n) { transform: rotate(2deg); }
+.facets-t-diary .facets-grid:not(.facets-organize) .facets-tile:not(.on):not(.facets-add)::before { content: ''; position: absolute; top: -6px; left: 50%; width: 34px; height: 11px; margin-left: -17px; background: var(--tape, rgba(255, 208, 226, 0.85)); transform: rotate(-4deg); pointer-events: none; z-index: 1; }
+.facets-t-diary .facets-grid .facets-tile:nth-child(4n+2) { --tape: rgba(196, 224, 255, 0.85); }
+.facets-t-diary .facets-grid .facets-tile:nth-child(4n+3) { --tape: rgba(255, 226, 160, 0.85); }
+.facets-t-diary .facets-grid .facets-tile:nth-child(4n) { --tape: rgba(190, 236, 214, 0.85); }
+.facets-t-diary.is-dark .facets-grid .facets-tile::before { opacity: 0.55; }
+.facets-sheet.facets-t-diary .facets-tile.on .facets-check { display: none; }
+.facets-sheet.facets-t-diary .facets-grid:not(.facets-organize) .facets-tile.on::after {
+    content: ''; position: absolute; top: -10px; right: -8px; width: 26px; height: 26px; transform: rotate(12deg); pointer-events: none; z-index: 2;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 19.5s-7-4.3-7-9.4A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.1c0 5.1-7 9.4-7 9.4Z' fill='%23ffb3cd' stroke='%23d84a80' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.facets-t-diary .facets-tile.on .facets-label { width: fit-content; max-width: 100%; margin: 0 auto; box-sizing: border-box; background: linear-gradient(transparent 48%, var(--ft-mark) 48%, var(--ft-mark) 76%, transparent 76%); }
+.facets-sheet.facets-t-diary .facets-tile.facets-add { border-radius: 3px; border-color: #d9c6b8; }
+.facets-sheet.facets-t-diary.is-dark .facets-tile.facets-add { border-color: #5a4d52; }
+.facets-sheet.facets-t-diary .facets-add-plus { background: #fde6ee; }
+.facets-sheet.facets-t-diary.is-dark .facets-add-plus { background: #4a2d3b; }
+
+/* the important button, per theme */
+.facets-sheet.facets-t-holo.is-light .facets-btn.facets-primary { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 0 #f6c3dd; }
+.facets-sheet.facets-t-holo.is-dark .facets-btn.facets-primary { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+.facets-sheet.facets-ft.facets-t-clean.is-light { --ft-ging: #c2386a; --ft-ging-line: #c2386a; --ft-ging-text: #ffffff; }
+.facets-sheet.facets-t-diary .facets-btn.facets-primary { outline: 1.5px dashed rgba(255, 255, 255, 0.95); outline-offset: -5px; }
+.facets-sheet.facets-t-diary.is-dark .facets-btn.facets-primary { outline-color: rgba(255, 255, 255, 0.3); }
+.facets-sheet.facets-t-diary .facets-btn.facets-primary:focus-visible { outline: 2px solid var(--facets-accent); outline-offset: 2px; }
+
+/* Photo Booth: a label strip on top */
+.facets-booth-strip { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 2px 4px 14px; padding: 8px 8px 8px 12px; border: 1px solid var(--facets-border); border-radius: 14px; background: var(--facets-surface); }
+.facets-booth-strip .facets-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.facets-sheet.facets-t-holo .facets-booth-strip { border-color: var(--ft-edge); box-shadow: 0 2px 8px rgba(140, 90, 200, 0.08); }
+.facets-sheet.facets-t-clean .facets-booth-strip { border-color: var(--ft-edge); border-radius: 12px; background: var(--facets-surface2); }
+.facets-sheet.facets-t-diary .facets-booth-strip { border-style: dashed; border-radius: 8px; }
+
+/* Photo Booth: two-colour icons; "Soon" cards keep their colour */
+.facets-btile-photo { position: relative; }
+.facets-bico { width: 34px; height: 34px; }
+.facets-bico .f { fill: var(--icofill, transparent); }
+.facets-btile-num, .facets-btile-stamp { display: none; }
+.facets-sheet.facets-ft.is-light .facets-tone-pink .facets-btile-photo { --tone: #ffe1ef; --ink: #d9477a; --icofill: #ffc2dc; }
+.facets-sheet.facets-ft.is-light .facets-tone-lav .facets-btile-photo { --tone: #ece3ff; --ink: #7d55c7; --icofill: #d9c8ff; }
+.facets-sheet.facets-ft.is-light .facets-tone-cherry .facets-btile-photo { --tone: #ffe4e6; --ink: #d6456a; --icofill: #ffc4cf; }
+.facets-sheet.facets-ft.is-light .facets-tone-sky .facets-btile-photo { --tone: #e0f0ff; --ink: #4a7fc7; --icofill: #c3e0ff; }
+.facets-sheet.facets-ft.is-light .facets-tone-gold .facets-btile-photo { --tone: #fff1d1; --ink: #b87d14; --icofill: #ffe0a0; }
+.facets-sheet.facets-ft.is-light .facets-tone-silver .facets-btile-photo { --tone: #def5ec; --ink: #2f8a6a; --icofill: #bfe9d8; }
+.facets-sheet.facets-ft.is-dark .facets-tone-pink .facets-btile-photo { --tone: rgba(255, 158, 192, 0.16); --ink: #ff9ec0; --icofill: rgba(255, 158, 192, 0.25); }
+.facets-sheet.facets-ft.is-dark .facets-tone-lav .facets-btile-photo { --tone: rgba(201, 178, 255, 0.16); --ink: #c9b2ff; --icofill: rgba(201, 178, 255, 0.25); }
+.facets-sheet.facets-ft.is-dark .facets-tone-cherry .facets-btile-photo { --tone: rgba(255, 154, 168, 0.15); --ink: #ff9aa8; --icofill: rgba(255, 154, 168, 0.25); }
+.facets-sheet.facets-ft.is-dark .facets-tone-sky .facets-btile-photo { --tone: rgba(156, 200, 255, 0.15); --ink: #9cc8ff; --icofill: rgba(156, 200, 255, 0.25); }
+.facets-sheet.facets-ft.is-dark .facets-tone-gold .facets-btile-photo { --tone: rgba(255, 210, 122, 0.14); --ink: #ffd27a; --icofill: rgba(255, 210, 122, 0.25); }
+.facets-sheet.facets-ft.is-dark .facets-tone-silver .facets-btile-photo { --tone: rgba(143, 224, 192, 0.14); --ink: #8fe0c0; --icofill: rgba(143, 224, 192, 0.25); }
+.facets-sheet.facets-ft .facets-btile.is-soon .facets-btile-name { color: var(--facets-muted); }
+.facets-sheet.facets-t-holo.is-light .facets-btile-photo { background: linear-gradient(150deg, rgba(255, 255, 255, 0.9), var(--tone) 60%); }
+.facets-sheet.facets-t-diary .facets-btile-photo { background: radial-gradient(circle, rgba(255, 255, 255, 0.7) 1px, transparent 1.5px) 0 0 / 10px 10px, var(--tone); }
+.facets-sheet.facets-t-diary.is-dark .facets-btile-photo { background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1.5px) 0 0 / 10px 10px, var(--tone); }
+.facets-sheet.facets-t-diary .facets-btile.is-soon .facets-btile-photo { border-style: solid; }
+/* Clean numbers the cards and keeps the small "Soon" tag; Holo and Diary stamp SOON on the photo */
+.facets-t-clean .facets-btile-num { display: block; position: absolute; top: 7px; left: 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.facets-t-holo .facets-btile-stamp, .facets-t-diary .facets-btile-stamp { display: block; position: absolute; right: 8px; bottom: 8px; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; line-height: 1; color: var(--ink); }
+.facets-t-holo .facets-btile-stamp { padding: 4px 8px; border-radius: 20px; background: rgba(255, 255, 255, 0.78); }
+.facets-t-holo.is-dark .facets-btile-stamp { background: rgba(0, 0, 0, 0.3); }
+.facets-t-diary .facets-btile-stamp { padding: 3px 7px 2px; border: 1.5px solid currentColor; border-radius: 50px; background: rgba(255, 255, 255, 0.5); transform: rotate(-8deg); opacity: 0.85; }
+.facets-t-diary.is-dark .facets-btile-stamp { background: rgba(0, 0, 0, 0.2); }
+.facets-t-holo .facets-btile-tag, .facets-t-diary .facets-btile-tag { display: none; }

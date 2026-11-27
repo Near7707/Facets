@@ -326,6 +326,20 @@ function headWardrobe() {
       ${settingsButton()}`;
 }
 
+/** 0.9.6: a small label over a card (NOW WEARING, MY CLOSET…); each theme decorates it. */
+function kicker(text) {
+    return `<div class="facets-kicker"><span>${esc(text)}</span></div>`;
+}
+
+/** The "+" tile at the end of an outfit grid (opens the file picker). */
+function addTile(labelKey) {
+    return `<label class="facets-tile facets-add" role="button" tabindex="0" title="${esc(t('add_outfit'))}">
+        <div class="facets-thumb"><span class="facets-add-plus"><i class="fa-solid fa-plus"></i></span></div>
+        <div class="facets-label">${esc(t(labelKey))}</div>
+        <input type="file" accept="image/*" multiple class="facets-file" data-act="add-files" hidden>
+      </label>`;
+}
+
 function emptyNote(msgKey) {
     return `<div class="facets-empty"><div class="facets-empty-body">${esc(t(msgKey))}</div></div>`;
 }
@@ -345,39 +359,51 @@ function viewWardrobe() {
     const globalO = findOutfit(key, e.global);
     const idx = (o) => e.outfits.indexOf(o);
     const globalName = globalO ? outfitLabel(globalO, idx(globalO)) : t('default_look');
-    let status;
+    // 0.9.6: the worn outfit's name is the big line; where it applies is the small line under it.
+    const nowName = shown ? outfitLabel(shown, idx(shown)) : t('default_look');
+    let sub = t('now_follow');
     if (chatKey) {
         const c = chatChoice(chatKey, key);
-        const chatName = c === undefined ? t('status_follow')
-            : c === DEFAULT_MARK ? t('default_look')
-                : (findOutfit(key, c) ? outfitLabel(findOutfit(key, c), idx(findOutfit(key, c))) : t('status_follow'));
-        const tl = timelineOf(chatKey, key);
-        const since = tl ? ` ${t('status_since', { time: timeLabel(tl.points[tl.points.length - 1].t) })}` : '';
-        status = `${t('status_chat', { a: chatName })}${since} · ${t('status_all', { b: globalName })}`;
-    } else {
-        status = t('status_all', { b: globalName });
+        const picked = c === DEFAULT_MARK || (c !== undefined && findOutfit(key, c));
+        if (picked) {
+            const tl = timelineOf(chatKey, key);
+            const since = tl ? ` ${t('status_since', { time: timeLabel(tl.points[tl.points.length - 1].t) })}` : '';
+            sub = `${t('now_chat_only')}${since} · ${t('status_all', { b: globalName })}`;
+        }
     }
     const drawer = currentDrawer(e);
     const visible = e.outfits.map((o, i) => [o, i]).filter(([o]) => !drawer || o.drawers.includes(drawer));
     const tiles = [tileHtml({ key, outfit: null, selected: !shown, mode: 'wear' })]
         .concat(visible.map(([o, i]) => tileHtml({ key, outfit: o, index: i, selected: shown?.id === o.id, mode: 'wear' })));
+    tiles.push(addTile('add_tile'));
     const historyBtn = chatKey && timelineOf(chatKey, key)
         ? `<button type="button" class="facets-btn facets-small" data-act="history" title="${esc(t('history'))}"><i class="fa-solid fa-clock-rotate-left"></i><span>${esc(t('history_short'))}</span></button>` : '';
     const diceBtn = chatKey && e.outfits.length
-        ? `<button type="button" class="facets-btn facets-small" data-act="dice" title="${esc(t('dice'))}" aria-label="${esc(t('dice'))}"><i class="fa-solid fa-dice"></i></button>` : '';
+        ? `<button type="button" class="facets-btn facets-small" data-act="dice" title="${esc(t('dice'))}" aria-label="${esc(t('dice'))}"><i class="fa-solid fa-dice"></i><span>${esc(t('dice_short'))}</span></button>` : '';
     // 0.9.0: what is worn and what the AI is told, in one card.
+    // 0.9.6: a small label, the worn outfit's name in big letters, where it applies, then the AI line.
     let body = `${whoPicker('tab')}${state.fromSettings ? leftoverBar() : ''}<div class="facets-card facets-nowcard">
-        <div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
+        <div class="facets-nowtop">
+          <div class="facets-nowtext">${kicker(t('now_label'))}
+            <div class="facets-nowname" title="${esc(nowName)}"><span>${esc(nowName)}</span></div>
+            <div class="facets-nowsub" title="${esc(sub)}">${esc(sub)}</div>
+          </div>
+          ${historyBtn || diceBtn ? `<div class="facets-nowbtns">${historyBtn}${diceBtn}</div>` : ''}
+        </div>
         ${moreHtml(e, key, chatKey)}
-      </div>
+      </div>`;
+    // 0.9.6: the outfits sit in one card (label, count, drawer tabs, grid), not loose on the background.
+    const n = e.outfits.length;
+    let closet = `<div class="facets-closet-head">${kicker(t('closet_label'))}<span class="facets-count">${esc(t(n === 1 ? 'closet_count_one' : 'closet_count', { n }))}</span></div>
         ${drawerChips(e, drawer)}
         <div class="facets-grid">${tiles.join('')}</div>`;
     if (e.outfits.length && drawer && !visible.length) {
-        body += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-body">${esc(t('drawer_empty'))}</div></div>`;
+        closet += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-body">${esc(t('drawer_empty'))}</div></div>`;
     }
     if (!e.outfits.length) {
-        body += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-title">${esc(t('empty_title'))}</div><div class="facets-empty-body">${esc(t('empty_body'))}</div></div>`;
+        closet += `<div class="facets-empty facets-empty-inline"><div class="facets-empty-title">${esc(t('empty_title'))}</div><div class="facets-empty-body">${esc(t('empty_body'))}</div></div>`;
     }
+    body += `<div class="facets-card facets-closet">${closet}</div>`;
     if (state.fromSettings || !chatKey) {
         body += `<div class="facets-note">${esc(t('settings_hint_nochat'))}</div>`;
     }
@@ -455,37 +481,62 @@ function boothHead(titleKey) {
 }
 
 function viewBooth() {
-    // 0.8.1: photocards (a holo tape on top, a coloured photo with the icon, the name as a caption).
-    // 0.9.2: no big title or tagline (the head switch already says Photo Booth); "Soon" is a small tag by the name.
+    // 0.8.1: photocards (a tape on top, a coloured photo with the icon, the name as a caption).
+    // 0.9.2: no big title or tagline (the head switch already says Photo Booth).
+    // 0.9.6: a thin label strip on top, two-colour icons drawn here, "Soon" cards keep their colour
+    //        (each theme shows either the SOON stamp on the photo or the small tag by the name).
+    let num = 0;
     const tile = (act, icon, nameKey, tone) => {
         const name = esc(t(nameKey));
-        const photo = `<span class="facets-btile-photo"><i class="fa-solid ${icon}" aria-hidden="true"></i></span>`;
+        num++;
+        const photo = `<span class="facets-btile-photo">${BOOTH_ICONS[icon]}<span class="facets-btile-num" aria-hidden="true">${String(num).padStart(2, '0')}</span>${act ? '' : `<span class="facets-btile-stamp" aria-hidden="true">${esc(t('booth_soon_stamp'))}</span>`}</span>`;
         const caption = `<span class="facets-btile-cap"><span class="facets-btile-name">${name}</span>${act ? '' : `<span class="facets-btile-tag">${esc(t('booth_soon'))}</span>`}</span>`;
         return act
             ? `<button type="button" class="facets-btile facets-tone-${tone}" data-act="booth-go" data-to="${act}" title="${name}">${photo}${caption}</button>`
             : `<div class="facets-btile facets-tone-${tone} is-soon" aria-disabled="true" title="${name} · ${esc(t('booth_soon'))}">${photo}${caption}</div>`;
     };
-    const body = `<div class="facets-btiles">
-        ${tile('room', 'fa-wand-magic-sparkles', 'booth_room', 'pink')}
-        ${tile('frame', 'fa-image-portrait', 'booth_frame', 'lav')}
-        ${tile('', 'fa-heart', 'booth_stickers', 'cherry')}
-        ${tile('', 'fa-id-card', 'booth_card', 'sky')}
-        ${tile('', 'fa-film', 'booth_strip', 'gold')}
-        ${tile('', 'fa-book-open', 'booth_book', 'silver')}
-      </div>`;
+    const tiles = [
+        tile('room', 'wand', 'booth_room', 'pink'),
+        tile('frame', 'portrait', 'booth_frame', 'lav'),
+        tile('', 'heart', 'booth_stickers', 'cherry'),
+        tile('', 'card', 'booth_card', 'sky'),
+        tile('', 'film', 'booth_strip', 'gold'),
+        tile('', 'book', 'booth_book', 'silver'),
+    ];
+    const body = `<div class="facets-booth-strip">${kicker(t('booth_label'))}<span class="facets-count">${esc(t('booth_count', { open: 2, soon: 4 }))}</span></div>
+      <div class="facets-btiles">${tiles.join('')}</div>`;
     return [`${headSwitch('booth')}${settingsButton()}`, body, ''];
 }
+
+// 0.9.6: two-colour icons for the photocards: the line is the card's ink, the soft fill is --icofill.
+const boothIcon = (paths) => `<svg class="facets-bico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+const BOOTH_ICONS = {
+    wand: boothIcon('<path d="m4 20 10-10"/><path d="m12.5 8.5 3 3"/><path class="f" d="M17 3.5l.6 1.6 1.6.6-1.6.6L17 7.9l-.6-1.6-1.6-.6 1.6-.6Z"/><path class="f" d="M20 10.5l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4Z"/>'),
+    portrait: boothIcon('<rect class="f" x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="10.5" r="2.6"/><path d="M7.5 17c.8-2 2.5-3 4.5-3s3.7 1 4.5 3"/>'),
+    heart: boothIcon('<path class="f" d="M12 19.5s-7-4.3-7-9.4A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.1c0 5.1-7 9.4-7 9.4Z"/>'),
+    card: boothIcon('<rect class="f" x="3.5" y="5.5" width="17" height="13" rx="2.5"/><circle cx="8.8" cy="11" r="1.8"/><path d="M6 15.5c.6-1.2 1.6-1.8 2.8-1.8s2.2.6 2.8 1.8M14 10h3.5M14 13h3.5"/>'),
+    film: boothIcon('<rect class="f" x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 4v16M16 4v16M4 9h4M4 15h4M16 9h4M16 15h4"/>'),
+    book: boothIcon('<path class="f" d="M12 7c-1.8-1.3-4.3-1.8-7.5-1.5v12.5c3.2-.3 5.7.2 7.5 1.5 1.8-1.3 4.3-1.8 7.5-1.5V5.5C16.3 5.2 13.8 5.7 12 7Z"/><path d="M12 7v12.5"/>'),
+};
 
 /** Character / me picker used in the Photo Booth (and the name of who is picked). */
 function whoPicker(act = 'booth-who') {
     const key = activeKey();
-    let name = `<div class="facets-booth-who" title="${esc(displayName(key))}">${esc(key ? displayName(key) : '')}</div>`;
+    let name = key ? `<div class="facets-booth-who" title="${esc(displayName(key))}">${esc(displayName(key))}</div>` : '';
+    let pick = false;
     if (state.fromSettings) {
         const opts = state.tab === 'char'
             ? allCharacters().map(c => [charKey(c.avatar), c.name])
             : allPersonas().map(p => [personaKey(p.avatar), p.name]);
         name = opts.length ? `<select class="facets-select facets-entity" data-act="entity" aria-label="${esc(t(state.tab === 'char' ? 'pick_character' : 'pick_persona'))}">
             ${opts.map(([k, n]) => `<option value="${esc(k)}"${k === key ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>` : '';
+        pick = !!name;
+    }
+    // 0.9.6: the name sits in a name tag with a small picture of what is worn now.
+    if (name) {
+        const shown = key && getEntity(key) ? effectiveOutfit(key, chatAvailable() ? currentScene().chatKey : null) : null;
+        const av = key ? `<span class="facets-namechip-av" aria-hidden="true"><img src="${esc(thumbOf(key, shown))}" alt="" draggable="false" onerror="this.parentNode.classList.add('broken')"></span>` : '';
+        name = `<div class="facets-namechip${pick ? ' has-select' : ''}">${av}${name}</div>`;
     }
     const b = (tab, label) => `<button type="button" role="radio" class="facets-segbtn${state.tab === tab ? ' on' : ''}" data-act="${act}" data-tab="${tab}" aria-checked="${state.tab === tab}">${esc(label)}</button>`;
     return `<div class="facets-whorow"><div class="facets-seg" role="radiogroup">${b('char', t('tab_character'))}${b('persona', t('who_me'))}</div>${name}</div>`;
@@ -986,11 +1037,7 @@ function viewOrganize() {
     const e = entityFor(key);
     const tiles = [tileHtml({ key, outfit: null, mode: 'organize' })]
         .concat(e.outfits.map((o, i) => tileHtml({ key, outfit: o, index: i, mode: 'organize' })));
-    tiles.push(`<label class="facets-tile facets-add" role="button" tabindex="0" title="${esc(t('add_outfit'))}">
-        <div class="facets-thumb"><i class="fa-solid fa-plus"></i></div>
-        <div class="facets-label">${esc(t('add_outfit'))}</div>
-        <input type="file" accept="image/*" multiple class="facets-file" data-act="add-files" hidden>
-      </label>`);
+    tiles.push(addTile('add_outfit'));
     const body = `<div class="facets-grid facets-organize">${tiles.join('')}</div>`;
     const foot = `<div class="facets-row">${addButton()}
         <button type="button" class="facets-btn" data-act="drawers" title="${esc(t('drawers'))}"><i class="fa-solid fa-box-archive"></i><span>${esc(t('drawers'))}</span></button>
