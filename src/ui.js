@@ -1439,19 +1439,19 @@ function viewEdit() {
             <input type="file" accept="image/*" data-act="replace-file" hidden></label>
         </div>
         <label class="facets-field">
-          <span class="facets-flabel">${esc(t('name_label'))} <small>${esc(t('name_note'))}</small></span>
+          <span class="facets-flabel facets-flabel-stack">${esc(t('name_label'))} <small>${esc(t('name_note'))}</small></span>
           <input type="text" class="facets-input" data-field="name" maxlength="60" value="${esc(state.draft.name)}" placeholder="${esc(t('name_ph'))}" autocomplete="off">
         </label>
         <label class="facets-field">
-          <span class="facets-flabel">${esc(t('desc_label'))} <small>${esc(t('desc_note'))}</small></span>
+          <span class="facets-flabel facets-flabel-stack">${esc(t('desc_label'))} <small>${esc(t('desc_note'))}</small></span>
           <textarea class="facets-input facets-textarea" data-field="desc" rows="3" maxlength="1000" placeholder="${esc(t('desc_ph'))}">${esc(state.draft.desc)}</textarea>
         </label>
         <label class="facets-field">
-          <span class="facets-flabel">${esc(t('kw_label'))} <small>${esc(t('kw_note'))}</small></span>
+          <span class="facets-flabel facets-flabel-stack">${esc(t('kw_label'))} <small>${esc(t('kw_note'))}</small></span>
           <input type="text" class="facets-input" data-field="kw" maxlength="300" value="${esc(state.draft.kw)}" placeholder="${esc(t('kw_ph'))}" autocomplete="off">
         </label>
         <div class="facets-field">
-          <span class="facets-flabel">${esc(t('drawers'))} <small>${esc(t('drawer_multi_note'))}</small></span>
+          <span class="facets-flabel facets-flabel-stack">${esc(t('drawers'))} <small>${esc(t('drawer_multi_note'))}</small></span>
           ${e.drawers.length
               ? `<div class="facets-chips facets-chips-wrap">${e.drawers.map((d, i) => {
                   const on = state.draft.drawers.includes(d.id);
@@ -1529,18 +1529,24 @@ function themePicker() {
     return `<div class="facets-themegrid">${THEMES.map(opt).join('')}</div>`;
 }
 
+/** 0.10.1: one card per group of settings, with its title and a small English tag. */
+function setCard(titleKey, tagKey, inner, extra = '') {
+    return `<div class="facets-section facets-setcard${extra}">
+        <div class="facets-sethead"><div class="facets-stitle">${esc(t(titleKey))}</div>${kicker(t(tagKey))}</div>
+        ${inner}
+      </div>`;
+}
+
 function viewSettings() {
     const head = headTitle(t('settings_title'));
     const body = `
       <div class="facets-stack">
-        <div class="facets-section">
-          <div class="facets-stitle">${esc(t('show_where'))}</div>
+        ${setCard('show_where', 'set_tag_show', `
           ${toggleRow('showInChat', t('show_chat'))}
           ${toggleRow('showInList', t('show_list'))}
           ${toggleRow('showStage', t('show_stage'), t('show_stage_note'))}
-          ${toggleRow('stageKbHide', t('stage_kb_hide'))}
-        </div>
-        <div class="facets-section">
+          ${toggleRow('stageKbHide', t('stage_kb_hide'))}`)}
+        ${setCard('set_ai_title', 'set_tag_ai', `
           ${toggleRow('tellAI', t('tell_ai'), t('tell_ai_note'))}
           <label class="facets-field">
             <span class="facets-flabel">${esc(t('tell_count'))}</span>
@@ -1548,46 +1554,39 @@ function viewSettings() {
               ${[1, 3, 5, 0].map(n => `<option value="${n}"${settings().tellCount === n ? ' selected' : ''}>${esc(n ? t('tell_count_n', { n }) : t('tell_count_always'))}</option>`).join('')}
             </select>
           </label>
-          <div class="facets-note">${esc(t('auto_no_tell'))}</div>
-        </div>
-        <div class="facets-section">
           ${toggleRow('sinceMode', t('since_label'), t('since_note'))}
-        </div>
-        <div class="facets-section">
-          <div class="facets-stitle">${esc(t('auto_title'))}</div>
+          <div class="facets-note">${esc(t('auto_no_tell'))}</div>`)}
+        ${setCard('auto_title', 'set_tag_auto', `
           ${toggleRow('autoKeywords', t('auto_kw'), t('auto_kw_note'))}
-          <label class="facets-field">
-            <span class="facets-flabel facets-flabel-stack">${esc(t('ignore_label'))} <small>${esc(t('ignore_note'))}</small></span>
-            <textarea class="facets-input facets-textarea" data-setting-text="ignoreWords" rows="2" maxlength="1000">${esc(settings().ignoreWords)}</textarea>
-          </label>
-          <button type="button" class="facets-btn facets-small" data-act="ignore-reset">${esc(t('ignore_reset'))}</button>
-          ${toggleRow('autoPair', t('auto_pair'), t('auto_pair_note'))}
-        </div>
-        <div class="facets-section">
-          <div class="facets-stitle">${esc(t('theme_title'))}</div>
-          ${themePicker()}
-          <div class="facets-note">${esc(t('theme_note'))}</div>
+          <div class="facets-field">
+            <label class="facets-field">
+              <span class="facets-flabel facets-flabel-stack">${esc(t('ignore_label'))} <small>${esc(t('ignore_note'))}</small></span>
+              <textarea class="facets-input facets-textarea" data-setting-text="ignoreWords" rows="2" maxlength="1000">${esc(settings().ignoreWords)}</textarea>
+            </label>
+            <div><button type="button" class="facets-btn facets-small" data-act="ignore-reset">${esc(t('ignore_reset'))}</button></div>
+          </div>
+          ${toggleRow('autoPair', t('auto_pair'), t('auto_pair_note'))}`)}
+        ${setCard('set_look_title', 'set_tag_look', `
+          <div class="facets-field">
+            <span class="facets-flabel facets-flabel-stack">${esc(t('theme_title'))} <small>${esc(t('theme_note'))}</small></span>
+            ${themePicker()}
+          </div>
           <label class="facets-field">
             <span class="facets-flabel">${esc(t('language'))}</span>
             <select class="facets-select" data-act="lang">
               ${LANGUAGES.map(l => `<option value="${l.id}"${l.id === getLanguage() ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}
             </select>
-          </label>
-        </div>
-        <div class="facets-section">
-          <div class="facets-stitle">${esc(t('backup'))}</div>
+          </label>`)}
+        ${setCard('backup', 'set_tag_backup', `
           ${toggleRow('backupImages', t('backup_images'), t('backup_images_note'))}
           <div class="facets-row">
             <button type="button" class="facets-btn" data-act="backup">${esc(t('backup_download'))}</button>
             <label class="facets-btn" role="button" tabindex="0">${esc(t('backup_import'))}
               <input type="file" accept=".json,application/json" data-act="import-file" hidden></label>
-          </div>
-        </div>
-        <div class="facets-section facets-danger-zone">
-          <div class="facets-stitle">${esc(t('danger'))}</div>
+          </div>`)}
+        ${setCard('danger', 'set_tag_danger', `
           <div class="facets-note">${esc(t('cleanup_note'))}</div>
-          <button type="button" class="facets-btn facets-danger-solid facets-wide" data-act="cleanup">${esc(t('cleanup'))}</button>
-        </div>
+          <button type="button" class="facets-btn facets-danger-solid facets-wide" data-act="cleanup">${esc(t('cleanup'))}</button>`, ' facets-danger-zone')}
         <div class="facets-version">Facets ${esc(t('version', { v: VERSION }))}</div>
       </div>`;
     return [head, body, ''];

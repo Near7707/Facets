@@ -2039,3 +2039,26 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-sheet.facets-t-clean .facets-stk-tile, .facets-sheet.facets-t-clean .facets-stk-onpic { background: var(--facets-surface2, var(--facets-surface)); border-color: var(--ft-edge, var(--facets-border)); border-radius: 13px; }
 .facets-sheet.facets-t-diary .facets-stk-tile, .facets-sheet.facets-t-diary .facets-stk-onpic { border-radius: 4px; }
 .facets-sheet.facets-t-diary .facets-stk-up { background: transparent; border-color: #e3b6d0; }
+
+/* ================= 0.10.1 settings polish =================
+   ⚙ groups as cards with a small English tag, thin lines between items, one weight for item names,
+   notes under names, Korean wrapped by words, and on a PC the text in fields as big as the item names. */
+
+.facets-flabel { font-weight: 400; }
+.facets-sheet :is(.facets-toggle-text, .facets-flabel, .facets-note, .facets-stitle) { word-break: keep-all; overflow-wrap: anywhere; }
+.facets-section.facets-setcard { gap: 0; padding: 12px 12px 4px; }
+.facets-sethead { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding-bottom: 6px; }
+.facets-sethead .facets-stitle { min-width: 0; }
+.facets-sethead .facets-kicker { flex: 0 0 auto; }
+.facets-setcard > :is(.facets-toggle, .facets-field, .facets-row) { padding: 8px 0; border-top: 1px solid var(--facets-border); }
+.facets-setcard > .facets-sethead + * { border-top: 0; padding-top: 2px; }
+.facets-setcard > .facets-note { padding: 2px 0 8px; }
+.facets-setcard > .facets-toggle + .facets-note, .facets-setcard > .facets-field + .facets-note { border-top: 0; }
+.facets-setcard > .facets-wide { margin-bottom: 8px; }
+.facets-setcard .facets-field .facets-field { padding: 0; border: 0; }
+.facets-setcard .facets-themegrid { margin-top: 2px; }
+.facets-sheet.facets-ft .facets-setcard > :is(.facets-toggle, .facets-field, .facets-row) { border-top-color: color-mix(in srgb, var(--facets-border) 60%, transparent); }
+.facets-setcard.facets-danger-zone .facets-sethead .facets-stitle { color: var(--facets-danger); }
+@media (hover: hover) and (pointer: fine) {
+    .facets-root .facets-input, .facets-root select.facets-select { font-size: 14px; }
+}

@@ -284,6 +284,15 @@ const STRINGS = {
         who_me: 'Me',
         room_title: 'Decorate the chat',
         room_tab_outfits: 'Outfits',
+        // 0.10.1 settings cards
+        set_ai_title: 'Tell the AI',
+        set_look_title: 'Theme & language',
+        set_tag_show: 'SHOW',
+        set_tag_ai: 'TELL THE AI',
+        set_tag_auto: 'AUTO CHANGE',
+        set_tag_look: 'LOOK',
+        set_tag_backup: 'BACKUP',
+        set_tag_danger: 'CAREFUL',
         // 0.10.0 stickers
         stk_ribbon: 'Ribbon',
         stk_heart: 'Heart',
@@ -674,6 +683,15 @@ const STRINGS = {
         who_me: '나',
         room_title: '채팅방 꾸미기',
         room_tab_outfits: '옷',
+        // 0.10.1 설정 카드
+        set_ai_title: 'AI에게 알려주기',
+        set_look_title: '테마·언어',
+        set_tag_show: 'SHOW',
+        set_tag_ai: 'TELL THE AI',
+        set_tag_auto: 'AUTO CHANGE',
+        set_tag_look: 'LOOK',
+        set_tag_backup: 'BACKUP',
+        set_tag_danger: 'CAREFUL',
         // 0.10.0 스티커
         stk_ribbon: '리본',
         stk_heart: '하트',
