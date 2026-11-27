@@ -5,7 +5,7 @@
 import { t, setLanguage, getLanguage, LANGUAGES } from './src/i18n.js';
 import {
     ctx, settings, save, uiLang, chooseLang, charKey, personaKey, removeEntity,
-    onCharacterRenamed, onChatRenamed, onChatDeleted,
+    onCharacterRenamed, onChatRenamed, onChatDeleted, THEMES,
 } from './src/store.js';
 import { deletePath } from './src/images.js';
 import {
@@ -16,8 +16,13 @@ import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender
 import { onReply } from './src/auto.js';
 import { initStage } from './src/stage.js';
 
-export const VERSION = '0.9.1';
+export const VERSION = '0.9.2';
 setVersion(VERSION);
+
+function themeOptions() {
+    const cur = settings().theme;
+    return THEMES.map(id => `<option value="${id}"${id === cur ? ' selected' : ''}>${t(`theme_${id}`)}</option>`).join('');
+}
 
 function langOptions() {
     return LANGUAGES.map(l => `<option value="${l.id}"${l.id === getLanguage() ? ' selected' : ''}>${l.label}</option>`).join('');
@@ -39,9 +44,9 @@ function settingsPanelHtml() {
             <span>${t('language')}</span>
             <select class="text_pole facets-panel-select" data-facets-lang>${langOptions()}</select>
           </label>
-          <label class="checkbox_label facets-panel-theme">
-            <input type="checkbox" data-facets-theme${settings().followTheme ? ' checked' : ''}>
-            <span>${t('follow_theme')}</span>
+          <label class="facets-panel-lang facets-panel-theme">
+            <span>${t('theme_title')}</span>
+            <select class="text_pole facets-panel-select" data-facets-theme>${themeOptions()}</select>
           </label>
           <div class="facets-panel-version">${t('version', { v: VERSION })}</div>
         </div>
@@ -64,7 +69,7 @@ function mountSettingsPanel() {
         panel.addEventListener('change', (e) => {
             const box = e.target.closest('[data-facets-theme]');
             if (box) {
-                settings().followTheme = box.checked;
+                if (THEMES.includes(box.value)) settings().theme = box.value;
                 save();
                 rerender();
                 return;
@@ -85,7 +90,9 @@ function mountSettingsPanel() {
         panel.querySelector('[data-facets-lang]').innerHTML = langOptions();
         panel.querySelector('.facets-panel-version').textContent = t('version', { v: VERSION });
         const theme = panel.querySelector('.facets-panel-theme span');
-        if (theme) theme.textContent = t('follow_theme');
+        if (theme) theme.textContent = t('theme_title');
+        const tsel = panel.querySelector('[data-facets-theme]');
+        if (tsel) tsel.innerHTML = themeOptions();
     }
 }
 
@@ -208,10 +215,10 @@ async function init() {
     startObservers();
     applyAllSoon();
     document.addEventListener('facets:lang', () => { mountSettingsPanel(); mountWand(); });
-    // 0.9.0: the theme switch lives in both places; keep the drawer checkbox in step with the ⚙ one.
+    // The theme picker lives in both places; keep the drawer one in step with ⚙.
     document.addEventListener('facets:theme', () => {
         const box = document.querySelector('#facets_settings [data-facets-theme]');
-        if (box) box.checked = !!settings().followTheme;
+        if (box) box.value = settings().theme;
     });
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isOpen() && !document.querySelector('dialog[open]')) requestClose();

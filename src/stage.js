@@ -484,10 +484,13 @@ function openTools(key) {
     const dark = syncTheme(layer);
     const bar = document.createElement('div');
     bar.className = st.locked ? 'facets-stage-tools is-locked' : 'facets-stage-tools';
-    // 0.9.1: the bar and its handles wear the Facets look too, unless "Follow SillyTavern theme" is on.
-    layer.classList.toggle('facets-stage-ft', !settings().followTheme);
-    layer.classList.toggle('is-dark', !settings().followTheme && dark);
-    layer.classList.toggle('is-light', !settings().followTheme && !dark);
+    // 0.9.1: the bar and its handles wear the Facets look too. 0.9.2: the theme picked in ⚙ ('st' = SillyTavern colours).
+    const theme = settings().theme;
+    const own = theme !== 'st';
+    layer.classList.toggle('facets-stage-ft', own);
+    for (const id of ['holo', 'clean', 'diary']) layer.classList.toggle(`facets-stage-t-${id}`, theme === id);
+    layer.classList.toggle('is-dark', own && dark);
+    layer.classList.toggle('is-light', own && !dark);
     bar.dataset.key = key;
     const rot = placeNow(key).rot || 0;
     bar.innerHTML = st.locked

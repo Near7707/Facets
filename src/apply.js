@@ -250,13 +250,14 @@ export function restoreEverything() {
 // ---- Avatar frames (0.8.0) ----
 // Decoration only: a mark on the chat's avatar pictures and one <style> of our own.
 // The rings and ribbons are drawn around the avatar with ::before / ::after; nothing is moved or resized.
+// 0.9.2: they hang on the box AROUND the avatar (.mesAvatarWrapper), because themes or other extensions
+// can give .avatar "overflow: hidden", which cut off everything drawn outside the picture.
 
 let lastFrameCss = '';
 
-export const FRAME_SEL = {
-    c: ['#chat .mes .avatar:has(img[data-facets-frame="c"])', '#chat .mes .avatar img[data-facets-frame="c"]'],
-    p: ['#chat .mes .avatar:has(img[data-facets-frame="p"])', '#chat .mes .avatar img[data-facets-frame="p"]'],
-};
+const holderSel = (wrap, tag) => wrap
+    ? [`#chat .mes .mesAvatarWrapper:has(img[data-facets-frame="${tag}"])`, `#chat .mes .mesAvatarWrapper:has(img[data-facets-frame="${tag}"]) .avatar`]
+    : [`#chat .mes .avatar:has(img[data-facets-frame="${tag}"])`, `#chat .mes .avatar img[data-facets-frame="${tag}"]`];
 
 export function applyFrames() {
     const sc = currentScene();
@@ -267,15 +268,18 @@ export function applyFrames() {
     }
     let radius = '';
     let box = null;
+    let wrap = true;
     for (const img of document.querySelectorAll('#chat .mes .avatar img')) {
         const key = (want.c || want.p) ? keyFromSrc(originalSrc(img)) : null;
         const tag = key && key === sc.charKey && want.c ? 'c' : key && key === sc.personaKey && want.p ? 'p' : '';
         if (tag) {
             if (img.dataset.facetsFrame !== tag) img.dataset.facetsFrame = tag;
             if (!box) {
-                // Where the picture sits in its avatar box (every chat avatar has the same size).
+                // Where the picture sits in its holder box (every chat avatar has the same size).
+                const holder = img.closest('.mesAvatarWrapper') || img.closest('.avatar');
+                wrap = !!holder?.classList.contains('mesAvatarWrapper');
                 const r = img.getBoundingClientRect();
-                const o = img.closest('.avatar')?.getBoundingClientRect();
+                const o = holder?.getBoundingClientRect();
                 if (o && r.width > 0 && r.height > 0) {
                     box = { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
                     radius = getComputedStyle(img).borderRadius;
@@ -285,7 +289,8 @@ export function applyFrames() {
     }
     // The ring follows the avatar's own corner radius (round, square, rounded or tall rectangle).
     const r = /^[\d.]+(px|%)$/.test(radius) ? radius : '50%';
-    const css = frameCss(FRAME_SEL.c[0], FRAME_SEL.c[1], want.c, r, box) + frameCss(FRAME_SEL.p[0], FRAME_SEL.p[1], want.p, r, box);
+    const C = holderSel(wrap, 'c'), P = holderSel(wrap, 'p');
+    const css = frameCss(C[0], C[1], want.c, r, box) + frameCss(P[0], P[1], want.p, r, box);
     if (css === lastFrameCss) return;
     lastFrameCss = css;
     let el = document.getElementById('facets_frames');

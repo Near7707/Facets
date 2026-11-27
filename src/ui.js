@@ -9,7 +9,7 @@ import {
     setDrawerKeywords, cleanKeywords, randomOf, setRandom, DEFAULT_IGNORE,
     removeEntity, moveEntity, unusedFiles, stageOf,
     pinsOf, addPin, removePin, layoutsOf, saveLayout, loadLayout, renameLayout, deleteLayout, MAX_PINS, MAX_LAYOUTS,
-    frameOf, setFrame,
+    frameOf, setFrame, THEMES,
 } from './store.js';
 import { resetPlace, screenKind, turnPiece, rotOf, pieceInfo, redrawPiece } from './stage.js';
 import {
@@ -49,6 +49,7 @@ const state = {
     roomTab: 'outfits', // outfits | stickers
     borderPid: '', // piece whose border is being edited
     frameColor: COLORS[1], // colour picked before a frame is chosen
+    settingsFrom: 'wardrobe', // 0.9.2: ⚙ can be opened from the Photo Booth too
     dark: true, // 0.9.0: SillyTavern's theme is dark (Facets' own look follows it)
 };
 
@@ -245,7 +246,8 @@ function back() {
         case 'history': state.screen = 'wardrobe'; state.histMore = false; break;
         case 'leftovers': state.screen = 'wardrobe'; break;
         case 'move': state.screen = 'leftovers'; state.moveFrom = ''; break;
-        case 'settings': case 'organize': case 'booth': state.screen = 'wardrobe'; break;
+        case 'settings': state.screen = state.settingsFrom === 'booth' ? 'booth' : 'wardrobe'; break;
+        case 'organize': case 'booth': state.screen = 'wardrobe'; break;
         case 'room': state.screen = state.roomFrom === 'wardrobe' ? 'wardrobe' : 'booth'; break;
         case 'border': state.screen = 'room'; break;
         case 'frame': state.screen = 'booth'; break;
@@ -278,9 +280,9 @@ function render() {
         case 'frame': [head, body, foot] = viewFrame(); break;
     }
     const booth = BOOTH_SCREENS.has(state.screen);
-    // 0.9.0: Facets' own look everywhere, unless "Follow SillyTavern theme" is on (the Photo Booth keeps its own look).
-    const own = booth || !settings().followTheme;
-    const look = own ? ` facets-ft ${state.dark ? 'is-dark' : 'is-light'}` : '';
+    // 0.9.2: one theme for every screen, the Photo Booth too. 'st' = SillyTavern colours.
+    const theme = settings().theme;
+    const look = theme === 'st' ? ' facets-tst' : ` facets-ft facets-t-${theme} ${state.dark ? 'is-dark' : 'is-light'}`;
     const lang = getLanguage();
     root.innerHTML = `
       <div class="facets-backdrop" data-act="close"></div>
@@ -306,13 +308,22 @@ function headTitle(title) {
       <div class="facets-title">${esc(title)}</div>`;
 }
 
+/** 0.9.2: [Wardrobe | Photo Booth] switch at the top left of both main screens. */
+function headSwitch(on) {
+    const b = (where, icon, label) => `<button type="button" role="tab" class="facets-segbtn${on === where ? ' on' : ''}" data-act="${where === 'wardrobe' ? 'go-wardrobe' : 'booth'}" aria-selected="${on === where}" title="${esc(label)}">${icon}<span>${esc(label)}</span></button>`;
+    return `<div class="facets-seg facets-headswitch" role="tablist" aria-label="${esc(t('ext_name'))}">
+        ${b('wardrobe', ICON_HANGER, t('wardrobe_title'))}${b('booth', ICON_CAMERA, t('booth_title'))}
+      </div><span class="facets-headgap"></span>`;
+}
+
+const settingsButton = () => `<button type="button" class="facets-iconbtn" data-act="settings" title="${esc(t('settings'))}" aria-label="${esc(t('settings'))}"><i class="fa-solid fa-gear"></i></button>`;
+
 function headWardrobe() {
     // 0.9.0: the character / me picker moved into the body (whoPicker), like the Photo Booth.
-    // 0.9.1: the Photo Booth doors moved up here as icons, so the outfits start higher.
-    return `<div class="facets-title">${esc(t('wardrobe_title'))}</div>
-      <button type="button" class="facets-iconbtn facets-head-door is-camera" data-act="booth" title="${esc(t('booth_open'))}" aria-label="${esc(t('booth_open'))}">${ICON_CAMERA}</button>
+    // 0.9.2: [Wardrobe | Photo Booth] switch, then ✨ Decorate the chat, ⚙ and ✕ as framed buttons.
+    return `${headSwitch('wardrobe')}
       <button type="button" class="facets-iconbtn facets-head-door is-wand" data-act="room" title="${esc(t('room_open'))}" aria-label="${esc(t('room_open'))}">${ICON_WAND}</button>
-      <button type="button" class="facets-iconbtn" data-act="settings" title="${esc(t('settings'))}" aria-label="${esc(t('settings'))}"><i class="fa-solid fa-gear"></i></button>`;
+      ${settingsButton()}`;
 }
 
 function emptyNote(msgKey) {
@@ -428,6 +439,7 @@ function moreHtml(e, key, chatKey) {
 /** The Photo Booth doors in the wardrobe (0.8.0): everything about decorating lives there. */
 // 0.8.1: line icons for the two doors (pink camera, lavender wand), drawn here so they don't depend on the icon font.
 const ICON_CAMERA = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 6.5 9.8 4.6h4.4l1.2 1.9H18a2.6 2.6 0 0 1 2.6 2.6v8.2A2.6 2.6 0 0 1 18 19.9H6a2.6 2.6 0 0 1-2.6-2.6V9.1A2.6 2.6 0 0 1 6 6.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.1" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.3" cy="9.5" r="1" fill="currentColor"/></svg>';
+const ICON_HANGER = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7.6a2.3 2.3 0 1 1 2.3-2.3M12 7.6v1.6l8.6 5.9a1.2 1.2 0 0 1-.7 2.2H4.1a1.2 1.2 0 0 1-.7-2.2L12 9.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_WAND = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 14 10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M16 3l1.1 2.9 2.9 1.1-2.9 1.1L16 11l-1.1-2.9L12 7l2.9-1.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M20 13.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="currentColor"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/></svg>';
 
 // ---------- Photo Booth (0.8.0) ----------
@@ -444,18 +456,16 @@ function boothHead(titleKey) {
 
 function viewBooth() {
     // 0.8.1: photocards (a holo tape on top, a coloured photo with the icon, the name as a caption).
+    // 0.9.2: no big title or tagline (the head switch already says Photo Booth); "Soon" is a small tag by the name.
     const tile = (act, icon, nameKey, tone) => {
         const name = esc(t(nameKey));
-        const photo = `<span class="facets-btile-photo"><i class="fa-solid ${icon}" aria-hidden="true"></i>${act ? '' : `<span class="facets-btile-stamp">${esc(t('booth_soon'))}</span>`}</span>`;
+        const photo = `<span class="facets-btile-photo"><i class="fa-solid ${icon}" aria-hidden="true"></i></span>`;
+        const caption = `<span class="facets-btile-cap"><span class="facets-btile-name">${name}</span>${act ? '' : `<span class="facets-btile-tag">${esc(t('booth_soon'))}</span>`}</span>`;
         return act
-            ? `<button type="button" class="facets-btile facets-tone-${tone}" data-act="booth-go" data-to="${act}" title="${name}">${photo}<span class="facets-btile-name">${name}</span></button>`
-            : `<div class="facets-btile facets-tone-${tone} is-soon" aria-disabled="true" title="${name} · ${esc(t('booth_soon'))}">${photo}<span class="facets-btile-name">${name}</span></div>`;
+            ? `<button type="button" class="facets-btile facets-tone-${tone}" data-act="booth-go" data-to="${act}" title="${name}">${photo}${caption}</button>`
+            : `<div class="facets-btile facets-tone-${tone} is-soon" aria-disabled="true" title="${name} · ${esc(t('booth_soon'))}">${photo}${caption}</div>`;
     };
-    const body = `<div class="facets-booth-hero">
-        <div class="facets-booth-logo">${esc(t('booth_title'))}</div>
-        <div class="facets-booth-sub">${esc(t('booth_sub'))}</div>
-      </div>
-      <div class="facets-btiles">
+    const body = `<div class="facets-btiles">
         ${tile('room', 'fa-wand-magic-sparkles', 'booth_room', 'pink')}
         ${tile('frame', 'fa-image-portrait', 'booth_frame', 'lav')}
         ${tile('', 'fa-heart', 'booth_stickers', 'cherry')}
@@ -463,7 +473,7 @@ function viewBooth() {
         ${tile('', 'fa-film', 'booth_strip', 'gold')}
         ${tile('', 'fa-book-open', 'booth_book', 'silver')}
       </div>`;
-    return [boothHead('booth_title'), body, ''];
+    return [`${headSwitch('booth')}${settingsButton()}`, body, ''];
 }
 
 /** Character / me picker used in the Photo Booth (and the name of who is picked). */
@@ -834,7 +844,7 @@ function viewFrame() {
           <div class="facets-fwrap">
             <div class="facets-fstage">
               ${av('').replace('class="facets-fav', 'class="facets-fav facets-fmain')}
-              <div class="facets-fmsg"><b>${esc(displayName(key))}</b><span>${esc(t('frame_preview_text'))}</span></div>
+              <div class="facets-fmsg"><b>${esc(displayName(key))}</b><span class="facets-fline" aria-hidden="true"></span><span class="facets-fline is-short" aria-hidden="true"></span></div>
             </div>
             <div class="facets-card"><div class="facets-card-title">${esc(t('frame_kind'))}</div><div class="facets-fchips">${chips}</div></div>
             <div class="facets-card"><div class="facets-card-title">${esc(t('border_color'))}</div>${colorSwatches('frame-color', color, fixed)}
@@ -1286,6 +1296,16 @@ function toggleRow(field, label, note = '') {
       </label>`;
 }
 
+function themePicker() {
+    const cur = settings().theme;
+    const opt = (id) => `<button type="button" class="facets-themeopt${cur === id ? ' on' : ''}" data-act="theme" data-v="${id}" aria-pressed="${cur === id}">
+        <span class="facets-themeprev is-${id}" aria-hidden="true"><span></span><span></span></span>
+        <span class="facets-themename">${esc(t(`theme_${id}`))}</span>
+        <span class="facets-themenote">${esc(t(`theme_${id}_note`))}</span>
+      </button>`;
+    return `<div class="facets-themegrid">${THEMES.map(opt).join('')}</div>`;
+}
+
 function viewSettings() {
     const head = headTitle(t('settings_title'));
     const body = `
@@ -1321,7 +1341,9 @@ function viewSettings() {
           ${toggleRow('autoPair', t('auto_pair'), t('auto_pair_note'))}
         </div>
         <div class="facets-section">
-          ${toggleRow('followTheme', t('follow_theme'), t('follow_theme_note'))}
+          <div class="facets-stitle">${esc(t('theme_title'))}</div>
+          ${themePicker()}
+          <div class="facets-note">${esc(t('theme_note'))}</div>
           <label class="facets-field">
             <span class="facets-flabel">${esc(t('language'))}</span>
             <select class="facets-select" data-act="lang">
@@ -1840,8 +1862,18 @@ function onClick(e) {
             state.draft.drawers = list.includes(id) ? list.filter(x => x !== id) : list.concat(id);
             render(); break;
         }
-        case 'settings': state.screen = 'settings'; render(); break;
+        case 'settings': state.settingsFrom = state.screen; state.screen = 'settings'; render(); break;
         case 'booth': state.screen = 'booth'; render(); break;
+        case 'go-wardrobe': state.screen = 'wardrobe'; render(); break;
+        case 'theme': {
+            const v = el.dataset.v;
+            if (!THEMES.includes(v) || settings().theme === v) break;
+            settings().theme = v;
+            save();
+            render();
+            document.dispatchEvent(new CustomEvent('facets:theme'));
+            break;
+        }
         case 'room': state.roomFrom = 'wardrobe'; state.roomTab = 'outfits'; state.screen = 'room'; render(); break;
         case 'booth-go':
             if (el.dataset.to === 'room') { state.roomFrom = 'booth'; state.roomTab = 'outfits'; }
@@ -2077,8 +2109,7 @@ function onChange(e) {
         settings()[el.dataset.setting] = el.checked;
         save();
         applyAllSoon();
-        if (state.screen === 'wardrobe' || el.dataset.setting === 'followTheme') render();
-        if (el.dataset.setting === 'followTheme') document.dispatchEvent(new CustomEvent('facets:theme'));
+        if (state.screen === 'wardrobe') render();
         return;
     }
     switch (act) {

@@ -4,7 +4,7 @@ import { t } from './i18n.js';
 import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx, CHAT_TABLES as STORE_TABLES } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
-const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'followTheme'];
+const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'theme'];
 // Every table keyed by chat (the same list the store moves on renames), plus branch marks.
 const CHAT_TABLES = [...STORE_TABLES, 'branchDone'];
 
@@ -88,8 +88,10 @@ export async function importBackup(file, toast) {
     for (const k of CHAT_TABLES) s[k] = tables[k];
     for (const k of PREF_KEYS) {
         const v = data.prefs?.[k];
-        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (k === 'ignoreWords' && typeof v === 'string')) s[k] = v;
+        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || ((k === 'ignoreWords' || k === 'theme') && typeof v === 'string')) s[k] = v;
     }
+    // 0.9.0-0.9.1 backups have followTheme instead of theme.
+    if (typeof data.prefs?.theme !== 'string' && typeof data.prefs?.followTheme === 'boolean') s.theme = data.prefs.followTheme ? 'st' : 'holo';
     s.files = files;
     migrate(s);
     save();

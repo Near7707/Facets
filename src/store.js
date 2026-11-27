@@ -29,7 +29,9 @@ const DEFAULTS = Object.freeze({
     showStage: true, // "In the chat" pictures (each character / persona still starts off)
     stageKbHide: true, // hide them while a phone keyboard is open
     moreOpen: false, // 0.9.1: the wardrobe's "Tell the AI / Random" fold is open
-    followTheme: false, // 0.9.0: false = Facets' own look (light/dark from SillyTavern); true = the wardrobe follows the SillyTavern theme
+    // 0.9.2: the look of every Facets window: 'st' (SillyTavern colours), 'holo', 'clean' or 'diary'.
+    // Light or dark always follows the SillyTavern theme. (Replaces 0.9.0's followTheme switch.)
+    theme: 'st',
     // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null, stage?: Stage }
     // key is "char:<avatar file>" or "persona:<avatar file>"
     entities: {},
@@ -78,7 +80,12 @@ export function settings() {
 // again would swap in new objects while a caller is still changing the old ones (0.7.0).
 const cleaned = new WeakSet();
 
+export const THEMES = ['st', 'holo', 'clean', 'diary'];
+
 export function migrate(s) {
+    // 0.9.2: followTheme -> theme. 0.9.x users kept Facets' own look (now "holo"), so it doesn't change on update.
+    if (s.theme === undefined && typeof s.followTheme === 'boolean') s.theme = s.followTheme ? 'st' : 'holo';
+    if ('followTheme' in s) delete s.followTheme;
     for (const [k, v] of Object.entries(DEFAULTS)) {
         if (s[k] === undefined) s[k] = structuredClone(v);
     }
@@ -122,6 +129,7 @@ export function migrate(s) {
         if (!Object.keys(row).length) delete s.frames[ck];
     }
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
+    if (!THEMES.includes(s.theme)) s.theme = 'st';
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
     for (const row of Object.values(s.timelines)) {
         for (const [ek, tl] of Object.entries(row || {})) {

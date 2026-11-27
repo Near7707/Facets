@@ -961,87 +961,11 @@ html.facets-open body { overscroll-behavior: none; }
 @media (prefers-reduced-motion: reduce) {
     .facets-fig-spark span, .facets-fig-back.is-holo,
     #chat .mes .avatar::before, #chat .mes .avatar::after,
+    #chat .mes .mesAvatarWrapper::before, #chat .mes .mesAvatarWrapper::after,
     .facets-booth .facets-fav::before, .facets-booth .facets-fav::after { animation: none !important; }
 }
 
-/* ----- wardrobe doors (0.8.1: holo border, inside follows the SillyTavern theme, line icons) ----- */
-.facets-boothrow { display: flex; gap: 8px; margin: 0 0 12px; }
-.facets-root .facets-boothrow .facets-btn {
-    flex: 1 1 0;
-    min-width: 0;
-    gap: 7px;
-    padding: 0 10px;
-    border: 2.5px solid transparent;
-    border-radius: 16px;
-    background:
-        linear-gradient(var(--facets-surface), var(--facets-surface)) padding-box,
-        linear-gradient(135deg, #ffb3e1, #c9b2ff 30%, #9fe6ff 55%, #fff3b0 80%, #ffb3e1) border-box;
-    color: var(--facets-text);
-    font-weight: 800;
-    box-shadow: 0 0 12px rgba(201, 160, 255, 0.25);
-}
-.facets-root .facets-boothrow .facets-btn:hover { filter: brightness(1.06); }
-.facets-door-ico { flex: 0 0 auto; width: 20px; height: 20px; }
-.facets-booth-door.is-camera .facets-door-ico { color: #f27cc6; }
-.facets-booth-door.is-wand .facets-door-ico { color: #a68af2; }
-
-/* ----- Photo Booth window: its own look (C · holo jelly), not the SillyTavern theme ----- */
-.facets-sheet.facets-booth {
-    color-scheme: light; /* 0.8.1: its own light look, so sliders and pickers stay light too */
-    --facets-bg: #f6ecff;
-    --facets-text: #4b1f66;
-    --facets-muted: #7a4e96;
-    --facets-surface: rgba(255, 255, 255, 0.72);
-    --facets-surface2: #ffffff;
-    --facets-border: #e6cdf4;
-    --facets-accent: #e05fb8;
-    --facets-on-accent: #ffffff;
-    --facets-danger: #c42a62;
-    --facets-danger-bg: #c42a62;
-    color: var(--facets-text);
-    border: 2px solid #fff;
-    background:
-        radial-gradient(circle, rgba(255, 255, 255, 0.7) 1.2px, transparent 1.8px) 0 0 / 46px 46px,
-        linear-gradient(165deg, #f6ecff, #eee8ff 35%, #fbedf5 65%, #ecf3fd);
-}
-.facets-booth .facets-head {
-    position: relative;
-    border-bottom: 0;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.55));
-    margin-bottom: 8px;
-}
-/* Lace edge under the header. */
-.facets-booth .facets-head::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -8px;
-    height: 8px;
-    background: radial-gradient(circle at 8px 0, rgba(255, 255, 255, 0.85) 7px, transparent 7.5px) 0 0 / 16px 8px repeat-x;
-    pointer-events: none;
-}
-.facets-booth .facets-title { font-weight: 800; }
-.facets-booth .facets-foot { background: rgba(255, 255, 255, 0.6); border-top: 2px solid #fff; }
-.facets-booth .facets-btn { border-radius: 999px; border-color: var(--facets-border); background: #fff; }
-.facets-booth .facets-btn:hover { background: #fff6fc; }
-.facets-booth .facets-btn.facets-primary,
-.facets-booth .facets-btn.facets-jellybtn {
-    border: 2px solid #fff;
-    background: linear-gradient(180deg, #ffa6dc, #e05fb8);
-    color: #fff;
-    font-weight: 800;
-    box-shadow: 0 3px 10px rgba(224, 95, 184, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.45);
-}
-.facets-booth .facets-btn.facets-danger { background: rgba(255, 255, 255, 0.8); }
-.facets-booth .facets-seg { background: rgba(255, 255, 255, 0.6); border: 2px solid #fff; border-radius: 999px; }
-.facets-booth .facets-segbtn { border-radius: 999px; }
-.facets-booth .facets-segbtn.on { background: linear-gradient(180deg, #ffa6dc, #e05fb8); color: #fff; box-shadow: none; }
-.facets-booth .facets-switch { background: #e6d6f2; border-color: #d7bfe9; }
-.facets-booth .facets-iconbtn:hover { background: rgba(255, 255, 255, 0.8); }
-.facets-booth .facets-hist-row { background: rgba(255, 255, 255, 0.8); border: 2px solid #fff; border-radius: 16px; }
-.facets-booth .facets-pin-row.is-pinned { border-color: #ffb3e1; }
-.facets-booth .facets-note { color: var(--facets-muted); }
+/* ----- Photo Booth window: 0.9.2 — no colours of its own any more; it wears the theme picked in ⚙ ----- */
 .facets-booth .facets-stack { gap: 10px; }
 
 .facets-card {
@@ -1090,109 +1014,44 @@ html.facets-open body { overscroll-behavior: none; }
 .facets-jelly-cherry { background: radial-gradient(circle at 32% 28%, #ffc2cf, #ff5b7a 40%, #b81e43); }
 .facets-jelly-silver { background: radial-gradient(circle at 32% 28%, #ffffff, #ddd6f0 40%, #9a8fc0); }
 
-/* home */
-.facets-booth-hero { text-align: center; padding: 6px 4px 14px; }
-.facets-root .facets-booth-logo {
-    font-family: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-    font-size: 32px;
-    font-weight: 900;
-    line-height: 1.15;
-    color: #fff;
-    letter-spacing: 0.5px;
-    /* 0.8.1: a deeper, thicker pink outline so the white title doesn't fade into the light background. */
-    text-shadow:
-        3px 0 0 #e04aa8, -3px 0 0 #e04aa8, 0 3px 0 #e04aa8, 0 -3px 0 #e04aa8,
-        2px 2px 0 #e04aa8, -2px 2px 0 #e04aa8, 2px -2px 0 #e04aa8, -2px -2px 0 #e04aa8,
-        0 6px 10px rgba(160, 60, 180, 0.35);
-}
-.facets-booth-sub { margin-top: 6px; font-size: 13px; color: var(--facets-muted); }
-.facets-btiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 16px; padding: 6px 6px 8px; }
+/* home: photocards (0.9.2: no big title; flat photo colour with a line icon; the look comes from the theme) */
+.facets-btiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 14px; padding: 10px 4px 8px; }
 @media (max-width: 600px) { .facets-btiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* 0.8.1: photocards. */
 .facets-btile {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 10px;
     min-width: 0;
-    padding: 9px 9px 11px;
-    border: 0;
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 8px 18px rgba(110, 60, 160, 0.2);
+    padding: 10px 10px 12px;
+    border: 1px solid var(--facets-border);
+    border-radius: 16px;
+    background: var(--facets-surface);
     color: var(--facets-text);
     font: inherit;
-    text-align: center;
+    text-align: left;
     cursor: pointer;
     touch-action: manipulation;
     transform: rotate(var(--tilt, 0deg));
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform 0.15s ease;
 }
-.facets-btile:nth-child(4n+1) { --tilt: -2deg; }
-.facets-btile:nth-child(4n+2) { --tilt: 2deg; }
-.facets-btile:nth-child(4n+3) { --tilt: 1.5deg; }
-.facets-btile:nth-child(4n+4) { --tilt: -1.5deg; }
-button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px); box-shadow: 0 10px 22px rgba(110, 60, 160, 0.26); }
-/* Holo tape on top. */
-.facets-btile::before {
-    content: '';
-    position: absolute;
-    top: -9px;
-    left: 50%;
-    width: 54px;
-    height: 18px;
-    margin-left: -27px;
-    border-radius: 3px;
-    background: linear-gradient(135deg, #ffb3e1, #c9b2ff 30%, #9fe6ff 55%, #fff3b0 80%, #ffb3e1);
-    opacity: 0.85;
-    z-index: 1;
-}
+button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px); }
 .facets-btile-photo {
-    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     height: 92px;
-    border-radius: 9px;
-    overflow: hidden;
-    color: #fff;
-    font-size: 38px;
-    background: var(--tone);
+    border-radius: 10px;
+    background: var(--tone, var(--facets-surface2));
+    color: var(--ink, var(--facets-accent));
+    font-size: 30px;
 }
-.facets-btile-photo::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(125deg, rgba(255, 255, 255, 0.55) 0 18%, transparent 34% 62%, rgba(255, 255, 255, 0.35) 75%, transparent);
-    pointer-events: none;
-}
-.facets-tone-pink { --tone: linear-gradient(150deg, #ffc9ea, #ff8fd2 60%, #d65cb3); }
-.facets-tone-lav { --tone: linear-gradient(150deg, #e2d6ff, #b596ff 60%, #8559d6); }
-.facets-tone-cherry { --tone: #ffb3c3; }
-.facets-tone-sky { --tone: #a9d2ff; }
-.facets-tone-gold { --tone: #ffd77a; }
-.facets-tone-silver { --tone: #cbbff0; }
 .facets-btile.is-soon { cursor: default; }
-.facets-btile.is-soon .facets-btile-photo { background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 7px, transparent 7px 14px), var(--tone); font-size: 34px; }
-.facets-btile-stamp {
-    position: absolute;
-    right: 6px;
-    bottom: 6px;
-    z-index: 1;
-    max-width: calc(100% - 12px);
-    padding: 2px 7px;
-    border: 2px solid #c24f9f;
-    border-radius: 7px;
-    background: rgba(255, 255, 255, 0.85);
-    color: #c24f9f;
-    font-size: 10.5px;
-    font-weight: 900;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transform: rotate(-8deg);
-}
-.facets-btile-name { max-width: 100%; font-size: 14.5px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-btile.is-soon .facets-btile-photo { --tone: var(--tone-soon, var(--facets-surface2)); --ink: var(--ink-soon, var(--facets-muted)); }
+.facets-btile-cap { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.facets-btile-name { min-width: 0; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-btile.is-soon .facets-btile-name { color: var(--facets-muted); }
+.facets-btile-tag { flex: 0 0 auto; padding: 2px 7px; border-radius: 999px; background: var(--facets-surface2); color: var(--facets-muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
 
 /* who + tabs */
 .facets-whorow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -1268,19 +1127,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-zoomlabel { flex: 0 0 auto; font-size: 13px; font-weight: 800; white-space: nowrap; }
 .facets-movecard .facets-row .facets-btn { flex: 1 1 0; min-width: 0; }
 .facets-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.facets-booth .facets-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 34px;
-    padding: 0 12px;
-    border: 2px solid #fff;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.75);
-    color: var(--facets-text);
-    font-size: 13px;
-}
-.facets-booth .facets-chip.on { background: linear-gradient(180deg, #ffa6dc, #e05fb8); color: #fff; box-shadow: 0 2px 8px rgba(224, 95, 184, 0.35); }
+.facets-booth .facets-chip { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border-radius: 999px; font-size: 13px; }
 .facets-patgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .facets-patchip {
     display: flex;
@@ -1314,7 +1161,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
     padding: 0;
     border: 3px solid #fff;
     border-radius: 50%;
-    background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7), transparent 45%), var(--sw);
+    background: var(--sw);
     box-shadow: 0 2px 6px rgba(120, 70, 170, 0.3);
     cursor: pointer;
     touch-action: manipulation;
@@ -1445,10 +1292,9 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 @media (min-width: 601px) { .facets-sheet.facets-ft { border: 1.5px solid var(--ft-edge); } }
 
 /* header */
-.facets-ft .facets-head { border-bottom: 0; background: transparent; margin-bottom: 0; padding-left: 14px; }
-.facets-ft .facets-head::after { display: none; }
+.facets-sheet.facets-ft .facets-head { border-bottom: 0; background: transparent; margin-bottom: 0; padding-left: 14px; }
 .facets-ft .facets-title { font-size: 20px; font-weight: 900; letter-spacing: -0.3px; }
-.facets-ft .facets-foot { background: var(--ft-foot); border-top: 1px solid var(--facets-border); }
+.facets-sheet.facets-ft .facets-foot { background: var(--ft-foot); border-top: 1px solid var(--facets-border); }
 .facets-ft .facets-stack { gap: 10px; }
 
 /* icon buttons: small rounded squares with line icons */
@@ -1469,8 +1315,8 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-sheet.facets-ft .facets-patchip.on,
 .facets-sheet.facets-ft .facets-fchip.on {
     border: 2px solid transparent;
-    background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
-    color: var(--facets-accent);
+    background: linear-gradient(var(--ft-on-fill, var(--ft-inner)), var(--ft-on-fill, var(--ft-inner))) padding-box, var(--ft-holo) border-box;
+    color: var(--ft-on-text, var(--facets-accent));
     font-weight: 800;
     box-shadow: none;
 }
@@ -1499,15 +1345,6 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-row-split > .facets-danger { flex: 0 0 auto; }
 .facets-foot .facets-row-split > .facets-danger { padding: 0 14px; }
 
-/* wardrobe doors: holo border, the inside is the card colour */
-.facets-sheet.facets-ft .facets-boothrow .facets-btn {
-    height: 46px;
-    border: 2.5px solid transparent;
-    background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
-    color: var(--facets-text);
-    box-shadow: none;
-}
-
 /* segmented pickers, the head tabs and the room tabs */
 .facets-sheet.facets-ft .facets-seg,
 .facets-sheet.facets-ft .facets-roomtabs {
@@ -1529,7 +1366,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-sheet.facets-ft .facets-segbtn.on,
 .facets-sheet.facets-ft .facets-roomtab.on {
     background: var(--ft-segon);
-    color: var(--facets-accent);
+    color: var(--ft-on-text, var(--facets-accent));
     font-weight: 800;
     box-shadow: var(--ft-segsh);
 }
@@ -1555,7 +1392,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
     border: 3px solid transparent;
     background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
 }
-.facets-ft .facets-tile.on .facets-label { color: var(--facets-accent); font-weight: 800; }
+.facets-ft .facets-tile.on .facets-label { color: var(--ft-on-text, var(--facets-accent)); font-weight: 800; }
 .facets-ft .facets-check { background: var(--facets-accent); color: var(--facets-on-accent); }
 
 /* cards */
@@ -1655,8 +1492,9 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
     .facets-sheet.facets-ft.is-dark { --facets-kbfill: #1c1527; }
 }
 
-/* Tool bar over the chat in the Facets look */
-.facets-stage.facets-stage-ft.is-light {
+/* Tool bar over the chat in the Facets look
+   (0.9.2: the colours sit on the bar and handles, because the layer itself carries the SillyTavern colours inline) */
+.facets-stage.facets-stage-ft.is-light :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) {
     --facets-bg: #fdf9ff;
     --facets-text: #3d2352;
     --facets-surface2: #ffffff;
@@ -1664,7 +1502,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
     --facets-accent: #d9477a;
     --ft-icon: #8a5fb5;
 }
-.facets-stage.facets-stage-ft.is-dark {
+.facets-stage.facets-stage-ft.is-dark :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) {
     --facets-bg: #2a2038;
     --facets-text: #f4eaff;
     --facets-surface2: rgba(255, 255, 255, 0.08);
@@ -1689,3 +1527,273 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-stage-ft .facets-stage-op { color: var(--ft-icon); }
 .facets-stage-ft .facets-stage-rot, .facets-stage-ft .facets-stage-size { background: var(--facets-bg); color: var(--ft-icon); border-color: var(--facets-accent); box-shadow: 0 2px 10px rgba(90, 50, 140, 0.3); }
 .facets-segline .facets-segbtn { padding: 0 6px; }
+
+/* ================= 0.9.2 themes =================
+   ⚙ picks one look for every screen (the Photo Booth and the tool bar over the chat too):
+   .facets-tst = SillyTavern colours; .facets-ft.facets-t-holo|clean|diary = Facets' own looks.
+   Light or dark always follows the SillyTavern theme (.is-light / .is-dark). */
+
+/* [Wardrobe | Photo Booth] switch in the head */
+.facets-door-ico { flex: 0 0 auto; width: 19px; height: 19px; }
+.facets-head .facets-headswitch { flex: 0 1 auto; min-width: 0; }
+.facets-head .facets-headswitch .facets-segbtn { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 34px; padding: 0 9px; font-size: 13.5px; }
+.facets-head:has(.facets-headswitch) { gap: 6px; }
+.facets-headswitch .facets-segbtn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.facets-headswitch .facets-door-ico { width: 16px; height: 16px; }
+.facets-headgap { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 380px) { .facets-head .facets-headswitch .facets-segbtn { padding: 0 8px; } .facets-headswitch .facets-door-ico { display: none; } }
+/* every head button is a framed button, in every theme */
+.facets-root .facets-head .facets-iconbtn { width: 36px; height: 36px; border: 1px solid var(--facets-border); border-radius: 10px; background: var(--facets-surface); }
+.facets-root .facets-sheet.facets-ft .facets-head .facets-iconbtn { width: 36px; height: 36px; }
+
+/* "From now on" beside the picker: wraps under it when the picker would be cut (English on a phone) */
+.facets-segline { flex-wrap: wrap; row-gap: 6px; }
+.facets-segline > .facets-seg { min-width: min(100%, 180px); }
+.facets-sheet[lang="en"] .facets-segline > .facets-seg { min-width: min(100%, 264px); }
+.facets-segline .facets-since-mini { margin-left: auto; }
+
+/* Avatar deco preview: two grey lines where the message goes */
+.facets-fmsg { flex: 1 1 auto; gap: 8px; }
+.facets-fline { display: block; width: 150px; max-width: 100%; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.2); }
+.facets-fline.is-short { width: 96px; }
+
+/* ⚙ theme picker */
+.facets-themegrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.facets-themeopt {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--facets-border);
+    border-radius: 14px;
+    background: var(--facets-surface);
+    color: var(--facets-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.facets-themeopt.on { border-color: var(--facets-accent); box-shadow: inset 0 0 0 1px var(--facets-accent); }
+.facets-root .facets-sheet.facets-ft .facets-themeopt { background: var(--facets-surface2); }
+.facets-root .facets-sheet.facets-ft .facets-themeopt.on {
+    border: 2px solid transparent;
+    padding: 7px;
+    background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
+    box-shadow: none;
+}
+.facets-themename { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-themeopt.on .facets-themename { color: var(--facets-accent); }
+.facets-themenote { font-size: 11.5px; color: var(--facets-muted); line-height: 1.3; }
+.facets-themeprev { display: flex; align-items: center; justify-content: center; gap: 5px; height: 52px; margin-bottom: 4px; border-radius: 9px; border: 1px solid rgba(0, 0, 0, 0.06); }
+.facets-themeprev > span:first-child { width: 34px; height: 14px; border-radius: 5px; }
+.facets-themeprev > span:last-child { width: 14px; height: 14px; border-radius: 50%; }
+.facets-themeprev.is-st { background: #2b2a33; }
+.facets-themeprev.is-st > span:first-child { height: 10px; background: #55535f; }
+.facets-themeprev.is-st > span:last-child { width: 18px; height: 10px; border-radius: 5px; background: #8e8a99; }
+.facets-themeprev.is-holo { background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 1px, transparent 1.6px) 0 0 / 14px 14px, linear-gradient(165deg, #f6eeff, #f1ecff 40%, #fbf0f6 75%, #eef4fd); }
+.facets-themeprev.is-holo > span:first-child { border: 1.5px solid #f0a3c4; background: #fff6fa; }
+.facets-themeprev.is-holo > span:last-child { background: #ff9fcb; border: 2px solid #fff; }
+.facets-themeprev.is-clean { background: #faf8fc; border-color: #eee8f3; }
+.facets-themeprev.is-clean > span:first-child { background: #fce4ee; }
+.facets-themeprev.is-clean > span:last-child { background: #f7a8c8; }
+.facets-themeprev.is-diary { background: radial-gradient(circle, #e9e0d6 1px, transparent 1.4px) 0 0 / 10px 10px, #fbf7f1; border-color: #ddd0c4; }
+.facets-themeprev.is-diary > span:first-child { background: #ffc2d8; border: 1px solid #ddd0c4; }
+.facets-themeprev.is-diary > span:last-child { width: 20px; height: 8px; border-radius: 0; background: rgba(189, 235, 214, 0.9); transform: rotate(-6deg); }
+
+/* ----- SillyTavern colours: the Photo Booth parts that had colours of their own ----- */
+.facets-sheet.facets-tst .facets-roomtabs { gap: 2px; padding: 2px; border: 1px solid var(--facets-border); border-radius: 10px; background: var(--facets-surface); }
+.facets-sheet.facets-tst .facets-roomtab { height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--facets-muted); }
+.facets-sheet.facets-tst .facets-roomtab.on { background: var(--facets-surface2); color: var(--facets-text); box-shadow: inset 0 0 0 1.5px var(--facets-accent); }
+.facets-sheet.facets-tst .facets-roomtab em { background: var(--facets-surface2); border-color: var(--facets-border); color: var(--facets-muted); }
+.facets-sheet.facets-tst .facets-card-thumb { border: 1px solid var(--facets-border); background: var(--facets-surface2); box-shadow: none; }
+.facets-sheet.facets-tst .facets-card-thumb.has-deco { border-color: var(--facets-accent); }
+.facets-sheet.facets-tst .facets-btnrow .facets-turnrow { background: var(--facets-surface); border: 1px solid var(--facets-border); border-radius: 10px; }
+.facets-sheet.facets-tst .facets-bprev, .facets-sheet.facets-tst .facets-fstage { border: 1px solid var(--facets-border); }
+.facets-sheet.facets-tst .facets-patchip { border: 1px solid var(--facets-border); background: var(--facets-surface); }
+.facets-sheet.facets-tst .facets-patchip.on { border-color: var(--facets-accent); box-shadow: inset 0 0 0 1px var(--facets-accent); }
+.facets-sheet.facets-tst .facets-fchip { border: 1px solid var(--facets-border); }
+.facets-sheet.facets-tst .facets-fchip.on { border-color: var(--facets-accent); box-shadow: inset 0 0 0 1px var(--facets-accent); }
+.facets-sheet.facets-tst .facets-swatch { border: 2px solid var(--facets-bg); box-shadow: 0 0 0 1px var(--facets-border); color: var(--facets-text); }
+.facets-sheet.facets-tst .facets-swatch.on { box-shadow: 0 0 0 2.5px var(--facets-accent); }
+.facets-sheet.facets-tst .facets-pin-row.is-pinned { border-color: var(--facets-accent); }
+.facets-sheet.facets-tst .facets-btile-photo { color: var(--facets-accent); }
+
+/* ----- Holo: the 0.9.x look, tidied ----- */
+.facets-t-holo .facets-btile { border: 1.5px solid var(--ft-edge); background: var(--facets-surface); box-shadow: var(--ft-card-sh); }
+.facets-t-holo .facets-btile:nth-child(6n+1), .facets-t-holo .facets-btile:nth-child(6n+4), .facets-t-holo .facets-btile:nth-child(6n+5) { --tilt: -1deg; }
+.facets-t-holo .facets-btile:nth-child(6n+2), .facets-t-holo .facets-btile:nth-child(6n+3), .facets-t-holo .facets-btile:nth-child(6n) { --tilt: 1deg; }
+.facets-t-holo .facets-btile::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    width: 52px;
+    height: 14px;
+    margin-left: -26px;
+    border-radius: 2px;
+    background: linear-gradient(135deg, #ffb3e1, #e3d0ff 30%, #c9f1ff 55%, #fff1b8 80%, #ffb3e1);
+    opacity: 0.8;
+}
+.facets-t-holo.is-light .facets-btile-tag { background: rgba(166, 138, 242, 0.16); color: #7a4e96; }
+
+/* tones of the photocards (light; dark below) */
+.facets-ft.is-light .facets-tone-pink { --tone: #fce4ee; --ink: #d9477a; }
+.facets-ft.is-light .facets-tone-lav { --tone: #efe8fb; --ink: #7a5bc0; }
+.facets-ft.is-light { --tone-soon: #f4f1f6; --ink-soon: #9a90a6; }
+.facets-ft.is-dark .facets-tone-pink { --tone: rgba(255, 143, 179, 0.16); --ink: #ff9ec0; }
+.facets-ft.is-dark .facets-tone-lav { --tone: rgba(180, 150, 255, 0.16); --ink: #c9b2ff; }
+.facets-ft.is-dark { --tone-soon: rgba(255, 255, 255, 0.06); --ink-soon: #9a90a6; }
+
+/* ----- Clean: white, thin lines, no decorations ----- */
+.facets-sheet.facets-ft.facets-t-clean.is-light {
+    --facets-bg: #faf8fc;
+    --facets-text: #2b2433;
+    --facets-muted: #6e6579;
+    --facets-surface: #ffffff;
+    --facets-surface2: #ffffff;
+    --facets-border: #e6dfec;
+    --facets-accent: #c23a6b;
+    --ft-bgimg: #faf8fc;
+    --ft-card-b: 1px solid #eee8f3;
+    --ft-card-sh: none;
+    --ft-seg: #f1ecf6;
+    --ft-segon: #ffffff;
+    --ft-segsh: 0 1px 3px rgba(43, 36, 51, 0.12);
+    --ft-icon: #6e5c88;
+    --ft-switch: #d9477a;
+    --ft-swoff: #e3dcea;
+    --ft-foot: #ffffff;
+    --ft-ging: #fce4ee;
+    --ft-ging-line: #fce4ee;
+    --ft-ging-text: #b8325f;
+    --ft-edge: #eee8f3;
+    --ft-holo: linear-gradient(#d9477a, #d9477a);
+    --ft-on-text: #c23a6b;
+    --facets-kbfill: #ffffff;
+}
+.facets-sheet.facets-ft.facets-t-clean.is-dark {
+    --facets-bg: #1c1a20;
+    --facets-text: #f1ecf6;
+    --facets-muted: #aaa1b5;
+    --facets-surface: #25222a;
+    --facets-surface2: #2c2832;
+    --facets-border: #3a3442;
+    --facets-accent: #ff8fb3;
+    --ft-bgimg: #1c1a20;
+    --ft-card-b: 1px solid #332e3a;
+    --ft-card-sh: none;
+    --ft-seg: #2a2630;
+    --ft-segon: #3a3542;
+    --ft-segsh: none;
+    --ft-inner: #25222a;
+    --ft-field: #25222a;
+    --ft-icon: #c9b6e6;
+    --ft-swoff: #3d3746;
+    --ft-foot: #201d24;
+    --ft-ging: #3d2430;
+    --ft-ging-line: #3d2430;
+    --ft-ging-text: #ffc2d6;
+    --ft-edge: #3a3442;
+    --ft-holo: linear-gradient(#ff8fb3, #ff8fb3);
+    --ft-on-text: #ff9ec0;
+    --facets-kbfill: #201d24;
+}
+.facets-sheet.facets-t-clean .facets-head { background: var(--ft-foot); border-bottom: 1px solid var(--ft-edge); }
+.facets-sheet.facets-t-clean .facets-card { border-radius: 16px; }
+.facets-t-clean .facets-btile { border: 1px solid var(--ft-edge); border-radius: 18px; background: var(--facets-surface); }
+
+/* ----- Diary: paper, tape and highlighter (soft lines, no heavy shadows) ----- */
+.facets-sheet.facets-ft.facets-t-diary.is-light {
+    --facets-bg: #fbf7f1;
+    --facets-text: #3b2f40;
+    --facets-muted: #6f6273;
+    --facets-surface: #fffdf9;
+    --facets-surface2: #fffdf9;
+    --facets-border: #ddd0c4;
+    --facets-accent: #c23a6b;
+    --ft-bgimg: radial-gradient(circle, #e9e0d6 1px, transparent 1.4px) 0 0 / 18px 18px, #fbf7f1;
+    --ft-card-b: 1px solid #ddd0c4;
+    --ft-card-sh: none;
+    --ft-seg: #fffdf9;
+    --ft-segon: #ffc2d8;
+    --ft-segsh: none;
+    --ft-inner: #fffdf9;
+    --ft-field: #fffdf9;
+    --ft-icon: #3b2f40;
+    --ft-switch: #f08fb4;
+    --ft-swoff: #ede3da;
+    --ft-foot: #fffdf9;
+    --ft-ging: #ffc2d8;
+    --ft-ging-line: #ddd0c4;
+    --ft-ging-text: #3b2f40;
+    --ft-edge: #ddd0c4;
+    --ft-holo: linear-gradient(#e0568a, #e0568a);
+    --ft-on-fill: #ffc2d8;
+    --ft-on-text: #3b2f40;
+    --ft-mark: #ffe7a3;
+    --ft-mark2: #d9ccff;
+    --tone-soon: #f3eef0;
+    --ink-soon: #6f6273;
+    --facets-kbfill: #fffdf9;
+}
+.facets-sheet.facets-ft.facets-t-diary.is-dark {
+    --facets-bg: #221d20;
+    --facets-text: #f3e9e4;
+    --facets-muted: #bcaea9;
+    --facets-surface: #2b2528;
+    --facets-surface2: #2f292c;
+    --facets-border: #4a3f43;
+    --facets-accent: #ff9ec0;
+    --ft-bgimg: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1.4px) 0 0 / 18px 18px, #221d20;
+    --ft-card-b: 1px solid #4a3f43;
+    --ft-card-sh: none;
+    --ft-seg: #2b2528;
+    --ft-segon: #6a3350;
+    --ft-segsh: none;
+    --ft-inner: #2b2528;
+    --ft-field: #2b2528;
+    --ft-icon: #e8d9de;
+    --ft-switch: #d9658f;
+    --ft-swoff: #4a3f43;
+    --ft-foot: #262023;
+    --ft-ging: #5a2d42;
+    --ft-ging-line: #7a4a5e;
+    --ft-ging-text: #ffe0ea;
+    --ft-edge: #4a3f43;
+    --ft-holo: linear-gradient(#ff8fb8, #ff8fb8);
+    --ft-on-fill: #5a2d42;
+    --ft-on-text: #fff0f5;
+    --ft-mark: rgba(255, 194, 216, 0.3);
+    --ft-mark2: rgba(217, 204, 255, 0.28);
+    --tone-soon: rgba(255, 255, 255, 0.05);
+    --ink-soon: #bcaea9;
+    --facets-kbfill: #262023;
+}
+.facets-sheet.facets-t-diary .facets-head { background: var(--ft-foot); border-bottom: 1px solid var(--ft-edge); }
+.facets-sheet.facets-t-diary .facets-seg, .facets-sheet.facets-t-diary .facets-roomtabs { border: 1px solid var(--ft-edge); padding: 2px; }
+.facets-sheet.facets-t-diary .facets-card { border-radius: 14px; }
+.facets-sheet.facets-t-diary .facets-head .facets-title { flex: 0 1 auto; margin-right: auto; padding: 0 2px; background: linear-gradient(transparent 58%, var(--ft-mark2) 58%); }
+.facets-t-diary .facets-card-title, .facets-t-diary .facets-stitle { width: fit-content; max-width: 100%; padding: 0 2px; background: linear-gradient(transparent 58%, var(--ft-mark) 58%); }
+.facets-t-diary .facets-btile { border: 1px solid var(--ft-edge); border-radius: 14px; background: var(--facets-surface); }
+.facets-t-diary.is-light .facets-tone-pink { --tone: #ffe1ec; --ink: #3b2f40; }
+.facets-t-diary.is-light .facets-tone-lav { --tone: #e9e1ff; --ink: #3b2f40; }
+.facets-t-diary .facets-btile-photo { border: 1px solid var(--ft-edge); height: 88px; border-radius: 9px; }
+.facets-t-diary .facets-btile.is-soon .facets-btile-photo { border-style: dashed; }
+.facets-t-diary .facets-btile-cap { justify-content: space-between; }
+.facets-t-diary .facets-btile-name { font-weight: 800; }
+.facets-t-diary .facets-btile-tag { border: 1.2px solid #8c7f8f; border-radius: 6px; padding: 1px 5px; background: transparent; color: var(--facets-muted); }
+.facets-t-diary .facets-btile::before { content: ''; position: absolute; top: -9px; left: 18px; width: 52px; height: 15px; background: var(--tape, rgba(255, 194, 216, 0.9)); transform: rotate(-5deg); }
+.facets-t-diary .facets-btile:nth-child(even)::before { left: auto; right: 18px; transform: rotate(5deg); }
+.facets-t-diary .facets-btile:nth-child(6n+2) { --tape: rgba(198, 224, 255, 0.9); }
+.facets-t-diary .facets-btile:nth-child(6n+3) { --tape: rgba(255, 231, 163, 0.9); }
+.facets-t-diary .facets-btile:nth-child(6n+4) { --tape: rgba(189, 235, 214, 0.9); }
+.facets-t-diary .facets-btile:nth-child(6n+5) { --tape: rgba(217, 204, 255, 0.9); }
+.facets-t-diary.is-dark .facets-btile::before { opacity: 0.55; }
+
+/* ----- the tool bar over the chat in Clean and Diary (Holo keeps its 0.9.1 colours) ----- */
+.facets-stage.facets-stage-ft.facets-stage-t-clean.is-light :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) { --facets-bg: #ffffff; --facets-text: #2b2433; --facets-border: #e6dfec; --facets-accent: #d9477a; --ft-icon: #6e5c88; }
+.facets-stage.facets-stage-ft.facets-stage-t-clean.is-dark :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) { --facets-bg: #25222a; --facets-text: #f1ecf6; --facets-border: #3a3442; --facets-accent: #ff8fb3; --ft-icon: #c9b6e6; }
+.facets-stage.facets-stage-ft.facets-stage-t-diary.is-light :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) { --facets-bg: #fffdf9; --facets-text: #3b2f40; --facets-surface2: #fffdf9; --facets-border: #ddd0c4; --facets-accent: #e0568a; --ft-icon: #3b2f40; }
+.facets-stage.facets-stage-ft.facets-stage-t-diary.is-dark :is(.facets-stage-tools, .facets-stage-rot, .facets-stage-size) { --facets-bg: #2b2528; --facets-text: #f3e9e4; --facets-surface2: #2f292c; --facets-border: #4a3f43; --facets-accent: #ff9ec0; --ft-icon: #e8d9de; }
+.facets-stage-t-clean .facets-stage-tools, .facets-stage-t-diary .facets-stage-tools { box-shadow: 0 4px 14px rgba(40, 30, 50, 0.18); }
