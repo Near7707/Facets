@@ -429,7 +429,7 @@ function drawOne(key) {
     const b = boxOf(key, st, f, W, H);
     const showFig = ready && !st.hidden && !f.broken && W > 0 && H > 0;
     f.fig.hidden = !showFig;
-    paintPiece(f, st.deco); // 0.8.0: border
+    paintPiece(f, st.deco, { size: b.w, ar: f.ar, src: f.src }); // 0.8.0: border (0.8.1: size for even cut-shape borders)
     f.fig.classList.toggle('is-locked', st.locked);
     f.fig.classList.toggle('is-flip', st.flip);
     f.fig.classList.toggle('is-active', gesture?.key === key);

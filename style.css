@@ -926,17 +926,27 @@ html.facets-open body { overscroll-behavior: none; }
 }
 .facets-fig.is-circle > .facets-fig-back { border-radius: 50%; }
 .facets-fig.is-heart > .facets-fig-back, .facets-fig.is-star > .facets-fig-back { border-radius: 0; box-shadow: none; }
-/* Masked shapes get their shadow from the whole picture. */
-.facets-fig.is-heart, .facets-fig.is-star { filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.35)); }
+/* Masked shapes get their shadow from the whole picture (0.8.1: a bit stronger, like a stuck-on sticker). */
+.facets-fig.is-heart, .facets-fig.is-star { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45)); }
+.facets-fig.is-circle > .facets-fig-back { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45); }
 .facets-fig.is-deco:not(.is-outline) > img {
     position: absolute;
     background: #fff;
     border-radius: 5px;
 }
 .facets-fig.is-deco.is-rect > img { object-fit: contain; }
-.facets-fig.is-deco.is-circle > img, .facets-fig.is-deco.is-heart > img, .facets-fig.is-deco.is-star > img { object-fit: cover; }
-.facets-fig.is-deco.is-circle > img { border-radius: 50%; }
-.facets-fig.is-deco.is-heart > img, .facets-fig.is-deco.is-star > img { border-radius: 0; }
+/* 0.8.1: cut shapes show the picture as a movable background; the <img> only loads it. */
+.facets-fig-pic {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-color: #fff;
+    background-repeat: no-repeat;
+}
+.facets-fig-pic[hidden] { display: none; }
+.facets-fig.is-cut > img { visibility: hidden; }
+.facets-fig.is-circle > .facets-fig-pic { border-radius: 50%; }
+.facets-fig.is-flip > .facets-fig-pic { transform: scaleX(-1); }
 .facets-fig-back.is-holo { animation: facets-holo 6s linear infinite; }
 .facets-fig-spark { position: absolute; inset: 0; pointer-events: none; }
 .facets-fig-spark span {
@@ -956,23 +966,30 @@ html.facets-open body { overscroll-behavior: none; }
     .facets-booth .facets-fav::before, .facets-booth .facets-fav::after { animation: none !important; }
 }
 
-/* ----- wardrobe doors ----- */
+/* ----- wardrobe doors (0.8.1: holo border, inside follows the SillyTavern theme, line icons) ----- */
 .facets-boothrow { display: flex; gap: 8px; margin: 0 0 12px; }
 .facets-root .facets-boothrow .facets-btn {
     flex: 1 1 0;
     min-width: 0;
+    gap: 7px;
     padding: 0 10px;
-    border: 2px solid #fff;
-    border-radius: 999px;
-    background: linear-gradient(135deg, #ffd1ea, #e3d0ff 35%, #c9f1ff 65%, #fff6c4);
-    color: #4b1f66;
-    font-weight: 700;
-    box-shadow: 0 2px 8px rgba(120, 70, 170, 0.25);
+    border: 2.5px solid transparent;
+    border-radius: 16px;
+    background:
+        linear-gradient(var(--facets-surface), var(--facets-surface)) padding-box,
+        linear-gradient(135deg, #ffb3e1, #c9b2ff 30%, #9fe6ff 55%, #fff3b0 80%, #ffb3e1) border-box;
+    color: var(--facets-text);
+    font-weight: 800;
+    box-shadow: 0 0 12px rgba(201, 160, 255, 0.25);
 }
-.facets-root .facets-boothrow .facets-btn:hover { filter: brightness(1.04); }
+.facets-root .facets-boothrow .facets-btn:hover { filter: brightness(1.06); }
+.facets-door-ico { flex: 0 0 auto; width: 20px; height: 20px; }
+.facets-booth-door.is-camera .facets-door-ico { color: #f27cc6; }
+.facets-booth-door.is-wand .facets-door-ico { color: #a68af2; }
 
 /* ----- Photo Booth window: its own look (C · holo jelly), not the SillyTavern theme ----- */
 .facets-sheet.facets-booth {
+    color-scheme: light; /* 0.8.1: its own light look, so sliders and pickers stay light too */
     --facets-bg: #f6ecff;
     --facets-text: #4b1f66;
     --facets-muted: #7a4e96;
@@ -1085,48 +1102,100 @@ html.facets-open body { overscroll-behavior: none; }
     line-height: 1.15;
     color: #fff;
     letter-spacing: 0.5px;
+    /* 0.8.1: a deeper, thicker pink outline so the white title doesn't fade into the light background. */
     text-shadow:
-        2px 0 0 #ff5fb8, -2px 0 0 #ff5fb8, 0 2px 0 #ff5fb8, 0 -2px 0 #ff5fb8,
-        2px 2px 0 #ff5fb8, -2px 2px 0 #ff5fb8, 2px -2px 0 #ff5fb8, -2px -2px 0 #ff5fb8,
-        0 5px 10px rgba(201, 79, 196, 0.4);
+        3px 0 0 #e04aa8, -3px 0 0 #e04aa8, 0 3px 0 #e04aa8, 0 -3px 0 #e04aa8,
+        2px 2px 0 #e04aa8, -2px 2px 0 #e04aa8, 2px -2px 0 #e04aa8, -2px -2px 0 #e04aa8,
+        0 6px 10px rgba(160, 60, 180, 0.35);
 }
 .facets-booth-sub { margin-top: 6px; font-size: 13px; color: var(--facets-muted); }
-.facets-btiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.facets-btiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 16px; padding: 6px 6px 8px; }
 @media (max-width: 600px) { .facets-btiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 0.8.1: photocards. */
 .facets-btile {
     position: relative;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 6px;
+    gap: 7px;
     min-width: 0;
-    min-height: 120px;
-    padding: 14px 8px 12px;
-    border: 2px solid #fff;
-    border-radius: 22px;
-    background: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55));
-    box-shadow: 0 6px 18px rgba(120, 70, 170, 0.16);
+    padding: 9px 9px 11px;
+    border: 0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(110, 60, 160, 0.2);
     color: var(--facets-text);
     font: inherit;
     text-align: center;
     cursor: pointer;
     touch-action: manipulation;
+    transform: rotate(var(--tilt, 0deg));
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-button.facets-btile:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(120, 70, 170, 0.22); }
-.facets-btile-name { max-width: 100%; font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.facets-btile-note { max-width: 100%; font-size: 12px; color: var(--facets-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.facets-btile.is-soon { cursor: default; opacity: 0.75; }
-.facets-btile.is-soon .facets-jelly { filter: saturate(0.55); }
-.facets-btile-soon {
-    padding: 2px 9px;
-    border-radius: 999px;
-    background: #fff;
-    border: 1.5px dashed #d7bfe9;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--facets-muted);
+.facets-btile:nth-child(4n+1) { --tilt: -2deg; }
+.facets-btile:nth-child(4n+2) { --tilt: 2deg; }
+.facets-btile:nth-child(4n+3) { --tilt: 1.5deg; }
+.facets-btile:nth-child(4n+4) { --tilt: -1.5deg; }
+button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px); box-shadow: 0 10px 22px rgba(110, 60, 160, 0.26); }
+/* Holo tape on top. */
+.facets-btile::before {
+    content: '';
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    width: 54px;
+    height: 18px;
+    margin-left: -27px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, #ffb3e1, #c9b2ff 30%, #9fe6ff 55%, #fff3b0 80%, #ffb3e1);
+    opacity: 0.85;
+    z-index: 1;
+}
+.facets-btile-photo {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 92px;
+    border-radius: 9px;
+    overflow: hidden;
+    color: #fff;
+    font-size: 38px;
+    background: var(--tone);
+}
+.facets-btile-photo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(125deg, rgba(255, 255, 255, 0.55) 0 18%, transparent 34% 62%, rgba(255, 255, 255, 0.35) 75%, transparent);
+    pointer-events: none;
+}
+.facets-tone-pink { --tone: linear-gradient(150deg, #ffc9ea, #ff8fd2 60%, #d65cb3); }
+.facets-tone-lav { --tone: linear-gradient(150deg, #e2d6ff, #b596ff 60%, #8559d6); }
+.facets-tone-cherry { --tone: #ffb3c3; }
+.facets-tone-sky { --tone: #a9d2ff; }
+.facets-tone-gold { --tone: #ffd77a; }
+.facets-tone-silver { --tone: #cbbff0; }
+.facets-btile.is-soon { cursor: default; }
+.facets-btile.is-soon .facets-btile-photo { background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 7px, transparent 7px 14px), var(--tone); font-size: 34px; }
+.facets-btile-stamp {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: 1;
+    max-width: calc(100% - 12px);
+    padding: 2px 7px;
+    border: 2px solid #c24f9f;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.85);
+    color: #c24f9f;
+    font-size: 10.5px;
+    font-weight: 900;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transform: rotate(-8deg);
 }
+.facets-btile-name { max-width: 100%; font-size: 14.5px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* who + tabs */
 .facets-whorow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -1195,6 +1264,12 @@ button.facets-btile:hover { transform: translateY(-1px); box-shadow: 0 8px 20px 
     overflow: hidden;
 }
 .facets-root .facets-bprev-fig { position: relative; pointer-events: none; cursor: default; flex: 0 0 auto; }
+/* 0.8.1: drag the picture inside a circle, heart or star. */
+.facets-bprev.is-movable { cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.facets-bprev.is-movable:active { cursor: grabbing; }
+.facets-zoomrow { display: flex; align-items: center; gap: 8px; }
+.facets-zoomlabel { flex: 0 0 auto; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.facets-movecard .facets-row .facets-btn { flex: 1 1 0; min-width: 0; }
 .facets-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .facets-booth .facets-chip {
     display: inline-flex;

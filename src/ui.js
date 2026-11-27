@@ -14,7 +14,7 @@ import {
 import { resetPlace, screenKind, turnPiece, rotOf, pieceInfo, redrawPiece } from './stage.js';
 import {
     PATTERNS, SHAPES, WIDTHS, COLORS, FIXED_COLOR, FRAME_KINDS, FRAME_FIXED_COLOR, FRAME_BLINK,
-    cleanDeco, cleanColor, patternBg, paintPiece, isCutShape, frameCss,
+    cleanDeco, cleanColor, patternBg, paintPiece, isCutShape, frameCss, coverBox, ZOOM_MAX,
 } from './deco.js';
 import { rollDice } from './auto.js';
 import {
@@ -410,10 +410,14 @@ function randomRow(e, key, chatKey) {
 }
 
 /** The Photo Booth doors in the wardrobe (0.8.0): everything about decorating lives there. */
+// 0.8.1: line icons for the two doors (pink camera, lavender wand), drawn here so they don't depend on the icon font.
+const ICON_CAMERA = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 6.5 9.8 4.6h4.4l1.2 1.9H18a2.6 2.6 0 0 1 2.6 2.6v8.2A2.6 2.6 0 0 1 18 19.9H6a2.6 2.6 0 0 1-2.6-2.6V9.1A2.6 2.6 0 0 1 6 6.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.1" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.3" cy="9.5" r="1" fill="currentColor"/></svg>';
+const ICON_WAND = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 14 10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M16 3l1.1 2.9 2.9 1.1-2.9 1.1L16 11l-1.1-2.9L12 7l2.9-1.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M20 13.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="currentColor"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/></svg>';
+
 function boothRow() {
     return `<div class="facets-boothrow">
-        <button type="button" class="facets-btn facets-booth-door" data-act="booth" title="${esc(t('booth_open'))}"><i class="fa-solid fa-camera-retro"></i><span>${esc(t('booth_open'))}</span></button>
-        <button type="button" class="facets-btn facets-booth-door" data-act="room" title="${esc(t('room_open'))}"><i class="fa-solid fa-wand-magic-sparkles"></i><span>${esc(t('room_open'))}</span></button>
+        <button type="button" class="facets-btn facets-booth-door is-camera" data-act="booth" title="${esc(t('booth_open'))}">${ICON_CAMERA}<span>${esc(t('booth_open'))}</span></button>
+        <button type="button" class="facets-btn facets-booth-door is-wand" data-act="room" title="${esc(t('room_open'))}">${ICON_WAND}<span>${esc(t('room_open'))}</span></button>
       </div>`;
 }
 
@@ -430,28 +434,25 @@ function boothHead(titleKey) {
 }
 
 function viewBooth() {
-    const tile = (act, icon, nameKey, noteKey, jelly) => act
-        ? `<button type="button" class="facets-btile" data-act="booth-go" data-to="${act}" title="${esc(t(nameKey))}">
-             <span class="facets-jelly facets-jelly-${jelly}"><i class="fa-solid ${icon}"></i></span>
-             <span class="facets-btile-name">${esc(t(nameKey))}</span>
-             <span class="facets-btile-note">${esc(t(noteKey))}</span>
-           </button>`
-        : `<div class="facets-btile is-soon" aria-disabled="true" title="${esc(t(nameKey))} · ${esc(t('booth_soon'))}">
-             <span class="facets-jelly facets-jelly-${jelly}"><i class="fa-solid ${icon}"></i></span>
-             <span class="facets-btile-name">${esc(t(nameKey))}</span>
-             <span class="facets-btile-soon">${esc(t('booth_soon'))}</span>
-           </div>`;
+    // 0.8.1: photocards (a holo tape on top, a coloured photo with the icon, the name as a caption).
+    const tile = (act, icon, nameKey, tone) => {
+        const name = esc(t(nameKey));
+        const photo = `<span class="facets-btile-photo"><i class="fa-solid ${icon}" aria-hidden="true"></i>${act ? '' : `<span class="facets-btile-stamp">${esc(t('booth_soon'))}</span>`}</span>`;
+        return act
+            ? `<button type="button" class="facets-btile facets-tone-${tone}" data-act="booth-go" data-to="${act}" title="${name}">${photo}<span class="facets-btile-name">${name}</span></button>`
+            : `<div class="facets-btile facets-tone-${tone} is-soon" aria-disabled="true" title="${name} · ${esc(t('booth_soon'))}">${photo}<span class="facets-btile-name">${name}</span></div>`;
+    };
     const body = `<div class="facets-booth-hero">
         <div class="facets-booth-logo">${esc(t('booth_title'))}</div>
         <div class="facets-booth-sub">${esc(t('booth_sub'))}</div>
       </div>
       <div class="facets-btiles">
-        ${tile('room', 'fa-wand-magic-sparkles', 'booth_room', 'booth_room_note', 'pink')}
-        ${tile('frame', 'fa-image-portrait', 'booth_frame', 'booth_frame_note', 'lav')}
-        ${tile('', 'fa-heart', 'booth_stickers', '', 'cherry')}
-        ${tile('', 'fa-id-card', 'booth_card', '', 'sky')}
-        ${tile('', 'fa-film', 'booth_strip', '', 'gold')}
-        ${tile('', 'fa-book-open', 'booth_book', '', 'silver')}
+        ${tile('room', 'fa-wand-magic-sparkles', 'booth_room', 'pink')}
+        ${tile('frame', 'fa-image-portrait', 'booth_frame', 'lav')}
+        ${tile('', 'fa-heart', 'booth_stickers', 'cherry')}
+        ${tile('', 'fa-id-card', 'booth_card', 'sky')}
+        ${tile('', 'fa-film', 'booth_strip', 'gold')}
+        ${tile('', 'fa-book-open', 'booth_book', 'silver')}
       </div>`;
     return [boothHead('booth_title'), body, ''];
 }
@@ -608,9 +609,22 @@ function viewBorder() {
     const notes = [];
     if (isCutShape(cur)) notes.push(t('border_cut_note'));
     if (outline) notes.push(t('border_outline_note'));
-    const body = `<div class="facets-bprev${info.pinned ? '' : ' is-main'}"><div class="facets-fig facets-bprev-fig"><img alt="" draggable="false"></div></div>
+    const cut = isCutShape(d);
+    // 0.8.1: move and zoom the picture inside a circle, heart or star.
+    const zoomPct = Math.round((d?.zoom || 1) * 100);
+    const moveCard = cut ? `<div class="facets-card facets-movecard"><div class="facets-card-title">${esc(t('border_move'))}</div>
+          <div class="facets-note">${esc(t('border_move_hint'))}</div>
+          <div class="facets-zoomrow"><span class="facets-zoomlabel">${esc(t('border_zoom'))}</span>
+            <button type="button" class="facets-iconbtn" data-act="deco-zoom-step" data-dir="-1" title="${esc(t('zoom_out'))}" aria-label="${esc(t('zoom_out'))}"><i class="fa-solid fa-minus"></i></button>
+            <input type="range" class="facets-range" min="100" max="${ZOOM_MAX * 100}" step="5" value="${zoomPct}" data-act="deco-zoom" aria-label="${esc(t('border_zoom'))}">
+            <button type="button" class="facets-iconbtn" data-act="deco-zoom-step" data-dir="1" title="${esc(t('zoom_in'))}" aria-label="${esc(t('zoom_in'))}"><i class="fa-solid fa-plus"></i></button>
+          </div>
+          <div class="facets-row"><button type="button" class="facets-btn" data-act="deco-center">${esc(t('border_center'))}</button><button type="button" class="facets-btn" data-act="deco-face">${esc(t('border_face'))}</button></div>
+        </div>` : '';
+    const body = `<div class="facets-bprev${info.pinned ? '' : ' is-main'}${cut ? ' is-movable' : ''}"><div class="facets-fig facets-bprev-fig"><img alt="" draggable="false"></div></div>
       <div class="facets-booth-who facets-center" title="${esc(info.name)}">${esc(`${displayName(info.ek)} · ${info.name}`)}</div>
       <div class="facets-stack">
+        ${moveCard}
         <div class="facets-card"><div class="facets-card-title">${esc(t('border_shape'))}</div><div class="facets-chips">${shapes}</div>
           ${notes.map(n => `<div class="facets-note">${esc(n)}</div>`).join('')}</div>
         <div class="facets-card"><div class="facets-card-title">${esc(t('border_pattern'))}</div><div class="facets-patgrid">${pats}</div></div>
@@ -640,25 +654,102 @@ function colorSwatches(act, value, disabled) {
 }
 
 /** Draw the border preview with the same code the chat uses. */
+let previewPiece = null;
 function mountBorderPreview() {
     const info = borderInfo();
+    const box = root.querySelector('.facets-bprev');
     const fig = root.querySelector('.facets-bprev-fig');
     if (!info || !fig) return;
     const img = fig.querySelector('img');
     const deco = info.st.deco;
+    const cut = isCutShape(deco);
+    const pf = { fig, img };
+    previewPiece = pf;
     const size = () => {
         const H = 150;
-        const ar = isCutShape(deco) ? 1 : (img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0.7);
-        const h = isCutShape(deco) ? H * 0.8 : H;
-        fig.style.width = `${Math.round(Math.min(h * ar, 260))}px`;
-        fig.style.height = `${Math.round(h)}px`;
+        const ar = cut ? 1 : (img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0.7);
+        // 0.8.1: cut shapes are no longer drawn smaller here, so they are easy to drag.
+        fig.style.width = `${Math.round(Math.min(H * ar, 260))}px`;
+        fig.style.height = `${H}px`;
     };
-    img.addEventListener('load', size);
+    const paint = () => paintPiece(pf, info.st.deco, { size: parseFloat(fig.style.width), src: info.src });
+    img.addEventListener('load', () => { size(); paint(); });
     img.src = info.src;
     size();
     fig.classList.toggle('is-flip', !!info.st.flip);
-    paintPiece({ fig, img }, deco);
+    paint();
+    if (cut && box) movePreview(box, pf, info, paint);
 }
+
+const previewAr = () => {
+    const img = previewPiece?.img;
+    return img?.naturalWidth && img?.naturalHeight ? img.naturalWidth / img.naturalHeight : 0;
+};
+
+/** Live change of where the picture sits in a cut shape (not saved until the gesture ends). */
+function nudgeDeco(info, paint, change) {
+    const d = cleanDeco({ ...info.st.deco, ...change });
+    info.st.deco = d;
+    paint();
+    redrawPiece(state.borderPid);
+    const r = root.querySelector('[data-act="deco-zoom"]');
+    if (r) r.value = String(Math.round(d.zoom * 100));
+}
+
+/** Drag to move, wheel or two fingers to zoom, on the border preview. */
+function movePreview(box, pf, info, paint) {
+    const pts = new Map();
+    let start = null;
+    const begin = () => {
+        const d = info.st.deco;
+        const list = [...pts.values()];
+        start = { fx: d.fx, fy: d.fy, zoom: d.zoom, pts: list.map(p => ({ ...p })), dist: list.length > 1 ? Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y) : 0 };
+    };
+    const end = (e) => {
+        if (!pts.delete(e.pointerId)) return;
+        if (pts.size) { begin(); return; }
+        start = null;
+        save();
+        applyAllSoon();
+    };
+    box.addEventListener('pointerdown', (e) => {
+        if (pts.size >= 2) return;
+        e.preventDefault();
+        try { box.setPointerCapture(e.pointerId); } catch { /* old browser */ }
+        pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        begin();
+    });
+    box.addEventListener('pointermove', (e) => {
+        if (!pts.has(e.pointerId) || !start) return;
+        pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const list = [...pts.values()];
+        if (list.length > 1 && start.dist > 0) {
+            const dist = Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y);
+            nudgeDeco(info, paint, { zoom: start.zoom * dist / start.dist });
+            return;
+        }
+        const S = parseFloat(pf.fig.style.width) || pf.fig.clientWidth;
+        const cb = coverBox(previewAr(), start.zoom);
+        const freeX = S * cb.w / 100 - S, freeY = S * cb.h / 100 - S;
+        const dx = (list[0].x - start.pts[0].x) * (info.st.flip ? -1 : 1);
+        const dy = list[0].y - start.pts[0].y;
+        nudgeDeco(info, paint, {
+            fx: freeX > 0.5 ? start.fx - dx / freeX * 100 : start.fx,
+            fy: freeY > 0.5 ? start.fy - dy / freeY * 100 : start.fy,
+        });
+    });
+    box.addEventListener('pointerup', end);
+    box.addEventListener('pointercancel', end);
+    box.addEventListener('lostpointercapture', end);
+    box.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        nudgeDeco(info, paint, { zoom: (info.st.deco.zoom || 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08) });
+        save();
+    }, { passive: false });
+}
+
+/** Where a face usually is: the top part of a tall picture. */
+const faceSpot = (ar) => ({ fx: 50, fy: ar && ar < 0.9 ? 12 : 30 });
 
 function setDeco(change) {
     const info = borderInfo();
@@ -666,6 +757,11 @@ function setDeco(change) {
     const base = info.st.deco || { shape: 'rect', pat: 'solid', color: COLORS[0], width: 'mid', glitter: false, blink: false };
     const next = change === null ? null : { ...base, ...change };
     if (next && !next.glitter) next.blink = false;
+    // 0.8.1: switching to a circle, heart or star on a tall picture starts at the top, where the face usually is.
+    if (next && change?.shape && isCutShape(next) && !isCutShape(info.st.deco)) {
+        const old = cleanDeco(base);
+        if (old.fx === 50 && old.fy === 50 && old.zoom === 1 && previewAr() > 0 && previewAr() < 0.9) Object.assign(next, faceSpot(previewAr()));
+    }
     info.st.deco = next ? cleanDeco(next) : null;
     save();
     redrawPiece(state.borderPid);
@@ -1734,6 +1830,13 @@ function onClick(e) {
         case 'deco': setDeco({ [el.dataset.k]: el.dataset.v }); break;
         case 'deco-color': setDeco({ color: el.dataset.v }); break;
         case 'deco-none': setDeco(null); break;
+        case 'deco-zoom-step': {
+            const z = borderInfo()?.st.deco?.zoom || 1;
+            setDeco({ zoom: Math.round((z + Number(el.dataset.dir) * 0.15) * 100) / 100 });
+            break;
+        }
+        case 'deco-center': setDeco({ fx: 50, fy: 50, zoom: 1 }); break;
+        case 'deco-face': setDeco(faceSpot(previewAr())); break;
         case 'frame-kind': setFrameHere({ kind: el.dataset.v }); break;
         case 'frame-color': setFrameHere({ color: el.dataset.v }); break;
         case 'stage-turn': {
@@ -1891,6 +1994,7 @@ function onChange(e) {
         return;
     }
     if (act === 'deco-color' && el.type === 'color') { setDeco({ color: el.value }); return; }
+    if (act === 'deco-zoom') { save(); applyAllSoon(); return; }
     if (act === 'frame-color' && el.type === 'color') { setFrameHere({ color: cleanColor(el.value) }); return; }
     if (act === 'frame-blink') { setFrameHere({ blink: el.checked }); return; }
     if (act === 'stage-on' || act === 'stage-flip') {
@@ -1963,6 +2067,11 @@ function onInput(e) {
     const el = e.target;
     if (el.dataset.field && state.draft) state.draft[el.dataset.field] = el.value;
     if (el.dataset.act === 'zoom' && state.crop) setScale(rangeToScale(Number(el.value)));
+    if (el.dataset.act === 'deco-zoom') {
+        const info = borderInfo();
+        const f = previewPiece;
+        if (info?.st.deco && f) nudgeDeco(info, () => paintPiece(f, info.st.deco, { size: parseFloat(f.fig.style.width), src: info.src }), { zoom: Number(el.value) / 100 });
+    }
 }
 
 // keyboard: Enter/Space on role=button tiles and labels

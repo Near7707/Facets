@@ -3,7 +3,7 @@
 
 export const PATTERNS = ['solid', 'dots', 'check', 'stripe', 'dashed', 'lace', 'glitter', 'rainbow', 'holo'];
 export const SHAPES = ['rect', 'circle', 'heart', 'star', 'outline'];
-export const WIDTHS = { thin: 4, mid: 7, thick: 11 };
+export const WIDTHS = { thin: 5, mid: 9, thick: 13 }; // 0.8.1: one step thicker (was 4 / 7 / 11)
 export const FRAME_KINDS = ['none', 'polaroid', 'lace', 'ribbon', 'heart', 'sparkle', 'rainbow', 'candy', 'star', 'holo'];
 // Jelly colours of the Photo Booth (white, pink, lavender, sky, mint, gold, cherry).
 export const COLORS = ['#ffffff', '#ff9ad6', '#b896ff', '#8fc8ff', '#8de0c0', '#ffd060', '#ff5b7a'];
@@ -21,7 +21,8 @@ export const cleanColor = (c, d = COLORS[0]) => (typeof c === 'string' && HEX.te
 
 /**
  * Border of one picture, or null for none.
- * Deco = { shape, pat, color, width, glitter (sparkles around it), blink (sparkles twinkle) }
+ * Deco = { shape, pat, color, width, glitter (sparkles around it), blink (sparkles twinkle),
+ *          fx, fy (0.8.1: which part of the picture shows in a cut shape, 0–100, 50 = middle), zoom (1–3) }
  */
 export function cleanDeco(d) {
     if (!d || typeof d !== 'object') return null;
@@ -34,11 +35,17 @@ export function cleanDeco(d) {
         width: d.width in WIDTHS ? d.width : 'mid',
         glitter: d.glitter === true,
         blink: d.blink === true,
+        fx: pct(d.fx),
+        fy: pct(d.fy),
+        zoom: Number.isFinite(+d.zoom) && d.zoom !== null && d.zoom !== '' ? Math.round(Math.min(ZOOM_MAX, Math.max(1, +d.zoom)) * 100) / 100 : 1,
     };
 }
 
+export const ZOOM_MAX = 3;
+const pct = (v) => (v === null || v === '' || !Number.isFinite(+v) ? 50 : Math.round(Math.min(100, Math.max(0, +v)) * 10) / 10);
+
 /** The old "sticker" switch (0.6.x–0.7.x): round cut, thin white border, shadow. */
-export const STICKER_DECO = Object.freeze({ shape: 'circle', pat: 'solid', color: '#ffffff', width: 'thin', glitter: false, blink: false });
+export const STICKER_DECO = Object.freeze({ shape: 'circle', pat: 'solid', color: '#ffffff', width: 'thin', glitter: false, blink: false, fx: 50, fy: 50, zoom: 1 });
 
 /** Avatar frame of one character / persona in one chat. Frame = { kind, color, blink } */
 export function cleanFrame(f) {
@@ -91,6 +98,7 @@ export function patternBg(pat, color) {
 // ---------- shapes ----------
 
 const svgUrl = (svg) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+// Old heart (0.8.0), still used by the avatar frame sticker.
 const HEART_PATH = 'M50 92C20 70 3 53 3 31 3 15 15 4 29 4c9 0 16 5 21 13C55 9 62 4 71 4c14 0 26 11 26 27 0 22-17 39-47 61Z';
 function starPath(cx, cy, ro, ri, n = 5) {
     const pts = [];
@@ -101,17 +109,39 @@ function starPath(cx, cy, ro, ri, n = 5) {
     }
     return `M${pts.join('L')}Z`;
 }
-const STAR_PATH = starPath(50, 53, 49, 23);
-const SHAPE_MASK = {
-    heart: svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 96" preserveAspectRatio="none"><path d="${HEART_PATH}"/></svg>`),
-    star: svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${STAR_PATH}" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>`),
+// 0.8.1: border shapes in a 100×100 box. Drawn as path + a round stroke of R, so the corners are soft.
+// The outer edge is the path pushed out by R; the picture inside is the outer edge pulled in by the border width,
+// so the border is the same thickness all the way round (0.8.0 shrank the whole shape, which made it uneven).
+const CUT_R = 1.5;
+const CUT_PATH = {
+    heart: 'M50 91C21 72 5.5 55 5.5 34 5.5 18.5 17 8 30.5 8 40 8 46.5 13.5 50 20.5 53.5 13.5 60 8 69.5 8 83 8 94.5 18.5 94.5 34 94.5 55 79 72 50 91Z',
+    star: starPath(50, 53, 45, 22.5),
 };
 
-function maskStyle(el, shape) {
-    const m = SHAPE_MASK[shape];
-    const v = m ? `${m} center / 100% 100% no-repeat` : '';
+function shapeSvg(shape, inner) {
+    const d = CUT_PATH[shape];
+    const base = `<path d="${d}" fill="#fff" stroke="#fff" stroke-width="${CUT_R * 2}" stroke-linejoin="round"/>`;
+    if (!inner) return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">${base}</svg>`);
+    // Inner edge: the outer edge (path + R) pulled in by the border width, by cutting a band around the path.
+    const band = Math.max(0.2, inner - CUT_R) * 2;
+    return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">${base}<path d="${d}" fill="none" stroke="#000" stroke-width="${band.toFixed(2)}" stroke-linejoin="round"/></mask><rect width="100" height="100" fill="#fff" mask="url(#m)"/></svg>`);
+}
+
+function setMask(el, url) {
+    const v = url ? `${url} center / 100% 100% no-repeat` : '';
     el.style.webkitMask = v;
     el.style.mask = v;
+}
+
+/**
+ * Background size and position that show part of a picture (aspect ratio ar) in a square box,
+ * like "cover", zoomed in by zoom, at fx/fy (0 = left/top edge, 100 = right/bottom edge).
+ */
+export function coverBox(ar, zoom = 1, fx = 50, fy = 50) {
+    const a = ar > 0 ? ar : 1;
+    const w = (a >= 1 ? a : 1) * 100 * zoom;
+    const h = (a >= 1 ? 1 : 1 / a) * 100 * zoom;
+    return { w, h, size: `${w.toFixed(2)}% ${h.toFixed(2)}%`, pos: `${fx}% ${fy}%` };
 }
 
 // ---------- pictures in the chat ----------
@@ -119,29 +149,42 @@ function maskStyle(el, shape) {
 const SPARKS = [[-6, 8], [92, -4], [104, 58], [-8, 76], [46, 102]];
 
 /**
- * Draw the border of one picture. f = { fig, img }; adds f.back (border layer) and f.spark (sparkles).
- * Only our own elements are changed.
+ * Draw the border of one picture. f = { fig, img }; adds f.back (border layer), f.pic (cut picture) and f.spark (sparkles).
+ * Only our own elements are changed. g = { size (px of the square box), ar (picture aspect), src } for cut shapes;
+ * without it, they are read from the elements.
  */
-export function paintPiece(f, deco) {
+export function paintPiece(f, deco, g = {}) {
     const d = cleanDeco(deco);
-    const sig = d ? JSON.stringify(d) : '';
+    const { fig, img } = f;
+    const cut = isCutShape(d);
+    const size = cut ? Math.round(g.size || parseFloat(fig.style.width) || fig.clientWidth || 0) : 0;
+    const ar = cut ? (g.ar || (img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 0)) : 0;
+    const src = cut ? (g.src || img.getAttribute('src') || '') : '';
+    const sig = d ? JSON.stringify([d, size, ar.toFixed(3), src]) : '';
     if (f.decoSig === sig) return;
     f.decoSig = sig;
-    const { fig, img } = f;
     if (!f.back) {
         f.back = document.createElement('div');
         f.back.className = 'facets-fig-back';
         fig.insertBefore(f.back, img);
     }
+    if (!f.pic) {
+        f.pic = document.createElement('div');
+        f.pic.className = 'facets-fig-pic';
+        img.after(f.pic);
+    }
     for (const s of SHAPES) fig.classList.remove(`is-${s}`);
     fig.classList.toggle('is-deco', !!d);
+    fig.classList.toggle('is-cut', cut);
     f.back.hidden = !d || d.shape === 'outline';
+    f.pic.hidden = !cut;
     img.style.filter = '';
     img.style.inset = '';
     img.style.width = '';
     img.style.height = '';
-    maskStyle(f.back, '');
-    maskStyle(img, '');
+    setMask(f.back, '');
+    setMask(f.pic, '');
+    f.pic.style.inset = '';
     if (d) {
         fig.classList.add(`is-${d.shape}`);
         const w = WIDTHS[d.width];
@@ -153,12 +196,25 @@ export function paintPiece(f, deco) {
         } else {
             f.back.style.background = patternBg(d.pat, d.color);
             f.back.classList.toggle('is-holo', d.pat === 'holo');
-            // A picture doesn't stretch between left and right like a box does: give it its size too.
-            img.style.inset = `${w}px`;
-            img.style.width = `calc(100% - ${w * 2}px)`;
-            img.style.height = `calc(100% - ${w * 2}px)`;
-            maskStyle(f.back, d.shape);
-            maskStyle(img, d.shape);
+            if (!cut) {
+                // A picture doesn't stretch between left and right like a box does: give it its size too.
+                img.style.inset = `${w}px`;
+                img.style.width = `calc(100% - ${w * 2}px)`;
+                img.style.height = `calc(100% - ${w * 2}px)`;
+            } else {
+                // Cut shapes: the picture is a background, so the shown part can be moved and zoomed.
+                const cb = coverBox(ar, d.zoom, d.fx, d.fy);
+                f.pic.style.backgroundImage = src ? `url("${src.replace(/["\\]/g, '\\$&')}")` : '';
+                f.pic.style.backgroundSize = ar ? cb.size : 'cover';
+                f.pic.style.backgroundPosition = cb.pos;
+                if (d.shape === 'circle') {
+                    f.pic.style.inset = `${w}px`;
+                } else {
+                    const inner = size > 0 ? w * 100 / size : 6;
+                    setMask(f.back, shapeSvg(d.shape, 0));
+                    setMask(f.pic, shapeSvg(d.shape, inner));
+                }
+            }
         }
     }
     // Sparkles around the picture.
