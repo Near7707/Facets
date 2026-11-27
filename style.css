@@ -1617,3 +1617,75 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-nowcard-ai .facets-toggle { min-height: 38px; }
 .facets-ft .facets-status { color: var(--facets-text); }
 @media (max-width: 600px) { .facets-sheet.facets-ft { border: none; } }
+
+/* ================= 0.9.1 tidy wardrobe ================= */
+/* Photo Booth doors as head icons */
+.facets-head-door .facets-door-ico { width: 19px; height: 19px; }
+.facets-root .facets-head-door.is-camera, .facets-sheet.facets-ft .facets-head-door.is-camera { color: #f27cc6; }
+.facets-root .facets-head-door.is-wand, .facets-sheet.facets-ft .facets-head-door.is-wand { color: #a68af2; }
+.facets-ft .facets-head .facets-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* "Tell the AI / Random" folded into one line */
+.facets-nowcard .facets-sumline { margin-top: 0; padding-top: 6px; border-top: 1px solid var(--facets-border); gap: 6px; }
+.facets-sumline .facets-aistate-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facets-sumline .facets-btn.facets-small { min-width: 0; }
+.facets-sum-rnd { flex: 0 0 auto; font-size: 14px; }
+.facets-root .facets-more-btn { flex: 0 0 auto; width: 32px; height: 32px; font-size: 12px; }
+.facets-morebox { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--facets-border); }
+.facets-morebox .facets-toggle { min-height: 38px; }
+.facets-morebox .facets-note { margin: 2px 0 0; }
+
+/* "From now on" beside the scope picker */
+.facets-segline { display: flex; align-items: center; gap: 10px; }
+.facets-segline > .facets-seg { flex: 1 1 auto; min-width: 0; }
+.facets-segline .facets-since-mini { flex: 0 0 auto; gap: 8px; min-height: 38px; }
+.facets-since-mini .facets-toggle-text > span { font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+/* Decorate the chat: the current-outfit row on top of the pinned list */
+.facets-mainpin { display: flex; flex-direction: column; gap: 8px; }
+.facets-mainpin.is-on { padding-bottom: 10px; border-bottom: 1px dashed var(--facets-border); }
+.facets-main-row .facets-hist-time { white-space: normal; }
+.facets-main-tools { margin: 0; }
+
+/* Phone keyboard: Safari's address bar above the keyboard is left out of the visible area,
+   so fill the strip under the window with its colour instead of showing the chat. */
+@media (max-width: 600px) {
+    .facets-root.facets-kb .facets-sheet { box-shadow: 0 160px 0 0 var(--facets-kbfill, var(--facets-bg)); }
+    .facets-sheet.facets-ft.is-light { --facets-kbfill: #fbf3fb; }
+    .facets-sheet.facets-ft.is-dark { --facets-kbfill: #1c1527; }
+}
+
+/* Tool bar over the chat in the Facets look */
+.facets-stage.facets-stage-ft.is-light {
+    --facets-bg: #fdf9ff;
+    --facets-text: #3d2352;
+    --facets-surface2: #ffffff;
+    --facets-border: #e4d5f2;
+    --facets-accent: #d9477a;
+    --ft-icon: #8a5fb5;
+}
+.facets-stage.facets-stage-ft.is-dark {
+    --facets-bg: #2a2038;
+    --facets-text: #f4eaff;
+    --facets-surface2: rgba(255, 255, 255, 0.08);
+    --facets-border: rgba(255, 255, 255, 0.16);
+    --facets-accent: #ffa3c8;
+    --ft-icon: #d9b8ff;
+}
+.facets-stage-ft .facets-stage-tools {
+    border: 1.5px solid var(--facets-border);
+    border-radius: 16px;
+    background: var(--facets-bg);
+    box-shadow: 0 6px 22px rgba(90, 50, 140, 0.28);
+}
+.facets-stage-ft .facets-stage-btn {
+    border: 1px solid var(--facets-border);
+    border-radius: 11px;
+    background: var(--facets-surface2);
+    color: var(--facets-text);
+}
+.facets-stage-ft .facets-stage-row2 .facets-stage-ico { color: var(--ft-icon); }
+.facets-stage-ft .facets-stage-ico[data-stage-act="remove"] { color: var(--facets-accent); }
+.facets-stage-ft .facets-stage-op { color: var(--ft-icon); }
+.facets-stage-ft .facets-stage-rot, .facets-stage-ft .facets-stage-size { background: var(--facets-bg); color: var(--ft-icon); border-color: var(--facets-accent); box-shadow: 0 2px 10px rgba(90, 50, 140, 0.3); }
+.facets-segline .facets-segbtn { padding: 0 6px; }

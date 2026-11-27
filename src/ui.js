@@ -308,7 +308,10 @@ function headTitle(title) {
 
 function headWardrobe() {
     // 0.9.0: the character / me picker moved into the body (whoPicker), like the Photo Booth.
+    // 0.9.1: the Photo Booth doors moved up here as icons, so the outfits start higher.
     return `<div class="facets-title">${esc(t('wardrobe_title'))}</div>
+      <button type="button" class="facets-iconbtn facets-head-door is-camera" data-act="booth" title="${esc(t('booth_open'))}" aria-label="${esc(t('booth_open'))}">${ICON_CAMERA}</button>
+      <button type="button" class="facets-iconbtn facets-head-door is-wand" data-act="room" title="${esc(t('room_open'))}" aria-label="${esc(t('room_open'))}">${ICON_WAND}</button>
       <button type="button" class="facets-iconbtn" data-act="settings" title="${esc(t('settings'))}" aria-label="${esc(t('settings'))}"><i class="fa-solid fa-gear"></i></button>`;
 }
 
@@ -354,10 +357,8 @@ function viewWardrobe() {
     // 0.9.0: what is worn and what the AI is told, in one card.
     let body = `${whoPicker('tab')}${state.fromSettings ? leftoverBar() : ''}<div class="facets-card facets-nowcard">
         <div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
-        <div class="facets-nowcard-ai">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
+        ${moreHtml(e, key, chatKey)}
       </div>
-        ${chatKey && e.outfits.length ? randomRow(e, key, chatKey) : ''}
-        ${boothRow()}
         ${drawerChips(e, drawer)}
         <div class="facets-grid">${tiles.join('')}</div>`;
     if (e.outfits.length && drawer && !visible.length) {
@@ -376,8 +377,14 @@ function viewWardrobe() {
             <button type="button" role="radio" class="facets-segbtn${state.scope === 'all' ? ' on' : ''}" data-act="scope" data-scope="all" aria-checked="${state.scope === 'all'}" title="${esc(allLabel)}">${esc(allLabel)}</button>
           </div>`
         : '';
-    const sinceRow = chatKey && state.scope === 'chat' ? `<div class="facets-since">${toggleRow('sinceMode', t('since_label'), t('since_note'))}</div>` : '';
-    const foot = `${seg}${sinceRow}
+    // 0.9.1: "From now on" sits beside the picker as one short line (the note is in ⚙ Settings).
+    const since = chatKey && state.scope === 'chat'
+        ? `<label class="facets-toggle facets-since-mini" title="${esc(t('since_note'))}">
+            <span class="facets-toggle-text"><span>${esc(t('since_label'))}</span></span>
+            <input type="checkbox" data-setting="sinceMode"${settings().sinceMode ? ' checked' : ''}>
+            <span class="facets-switch" aria-hidden="true"></span>
+          </label>` : '';
+    const foot = `${seg ? `<div class="facets-segline">${seg}${since}</div>` : ''}
       <div class="facets-row">
         <button type="button" class="facets-btn" data-act="wear-default" title="${esc(t('default_look'))}">${esc(t('default_look'))}</button>
         ${addButton(true)}
@@ -392,24 +399,36 @@ function randomRow(e, key, chatKey) {
     const on = range !== undefined;
     const i = on && range ? e.drawers.findIndex(d => d.id === range) : -1;
     const note = !on ? t('rnd_note_off') : i >= 0 ? t('rnd_note_drawer', { name: drawerLabel(e.drawers[i], i) }) : t('rnd_note_all');
-    return `<div class="facets-aibar facets-rndbar"><label class="facets-toggle">
+    return `<label class="facets-toggle">
         <span class="facets-toggle-text"><span>${esc(t('rnd_label'))}</span><small>${esc(note)}</small></span>
         <input type="checkbox" data-act="random"${on ? ' checked' : ''}>
         <span class="facets-switch" aria-hidden="true"></span>
-      </label></div>`;
+      </label>`;
+}
+
+/**
+ * 0.9.1: "Tell the AI" and "Random each reply" fold into one summary line under the status.
+ * The line keeps the AI state and its button; ▾ opens the switches and their notes (remembered).
+ */
+function moreHtml(e, key, chatKey) {
+    const s = settings();
+    const open = !!s.moreOpen;
+    const st = s.tellAI && chatKey ? aiState(key, chatKey) : null;
+    const text = !s.tellAI ? t('ai_off_short') : st ? st.text : t('ai_on_short');
+    const rnd = chatKey && randomOf(chatKey, key) !== undefined
+        ? `<span class="facets-sum-rnd" title="${esc(t('rnd_label'))}" aria-label="${esc(t('rnd_label'))}">🎲</span>` : '';
+    const more = `<button type="button" class="facets-iconbtn facets-more-btn" data-act="more" aria-expanded="${open}" title="${esc(t(open ? 'more_close' : 'more_open'))}" aria-label="${esc(t(open ? 'more_close' : 'more_open'))}"><i class="fa-solid fa-chevron-${open ? 'up' : 'down'}"></i></button>`;
+    const line = `<div class="facets-aistate facets-sumline${st?.on ? ' is-on' : ''}"><span class="facets-aistate-dot" aria-hidden="true"></span><span class="facets-aistate-text">${esc(text)}</span>${rnd}${st?.btn || ''}${more}</div>`;
+    if (!open) return line;
+    const rows = [toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))];
+    if (chatKey && e.outfits.length) rows.push(randomRow(e, key, chatKey));
+    return `${line}<div class="facets-morebox">${rows.join('')}<div class="facets-note">${esc(t('auto_no_tell'))}</div></div>`;
 }
 
 /** The Photo Booth doors in the wardrobe (0.8.0): everything about decorating lives there. */
 // 0.8.1: line icons for the two doors (pink camera, lavender wand), drawn here so they don't depend on the icon font.
 const ICON_CAMERA = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 6.5 9.8 4.6h4.4l1.2 1.9H18a2.6 2.6 0 0 1 2.6 2.6v8.2A2.6 2.6 0 0 1 18 19.9H6a2.6 2.6 0 0 1-2.6-2.6V9.1A2.6 2.6 0 0 1 6 6.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.1" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.3" cy="9.5" r="1" fill="currentColor"/></svg>';
 const ICON_WAND = '<svg class="facets-door-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 14 10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M16 3l1.1 2.9 2.9 1.1-2.9 1.1L16 11l-1.1-2.9L12 7l2.9-1.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M20 13.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="currentColor"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/></svg>';
-
-function boothRow() {
-    return `<div class="facets-boothrow">
-        <button type="button" class="facets-btn facets-booth-door is-camera" data-act="booth" title="${esc(t('booth_open'))}">${ICON_CAMERA}<span>${esc(t('booth_open'))}</span></button>
-        <button type="button" class="facets-btn facets-booth-door is-wand" data-act="room" title="${esc(t('room_open'))}">${ICON_WAND}<span>${esc(t('room_open'))}</span></button>
-      </div>`;
-}
 
 // ---------- Photo Booth (0.8.0) ----------
 
@@ -491,19 +510,19 @@ function roomOutfits(key) {
     const st = stageOf(key, true);
     const chatKey = chatAvailable() ? currentScene().chatKey : null;
     const now = effectiveOutfit(key, chatKey);
-    const note = !settings().showStage ? t('stage_note_master') : st.on ? t('stage_note_on') : t('stage_note_off');
-    const states = [];
-    if (st.hidden) states.push(`<div class="facets-stage-state"><span>${esc(t('stage_hidden_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-show"><i class="fa-solid fa-eye"></i><span>${esc(t('stage_show'))}</span></button></div>`);
-    if (st.locked) states.push(`<div class="facets-stage-state"><span>${esc(t('stage_locked_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button></div>`);
-    const kind = t(screenKind() === 'narrow' ? 'stage_kind_narrow' : 'stage_kind_wide');
-    const main = `<div class="facets-card">
-        <div class="facets-card-title">${esc(t('stage_main_title'))}</div>
-        <div class="facets-maincard">
-          <div class="facets-card-thumb${st.deco ? ' has-deco' : ''}"><img src="${esc(thumbOf(key, now))}" alt="" draggable="false"></div>
-          ${sw('stage-on', st.on, t('room_main_switch'), note)}
-        </div>
-        ${states.join('')}
-        <div class="facets-btnrow">
+    // 0.9.1: the current-outfit picture is the first row of the one list, with [Add] / [Remove] like the others.
+    const sub = st.on && !settings().showStage ? t('stage_note_master') : t('main_sub');
+    const tail = st.on
+        ? `<button type="button" class="facets-btn facets-small" data-act="stage-off">${esc(t('stage_remove'))}</button>`
+        : `<button type="button" class="facets-btn facets-small facets-jellybtn" data-act="stage-on-btn">${esc(t('pin_add'))}</button>`;
+    let tools = '';
+    if (st.on) {
+        const states = [];
+        if (st.hidden) states.push(`<div class="facets-stage-state"><span>${esc(t('stage_hidden_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-show"><i class="fa-solid fa-eye"></i><span>${esc(t('stage_show'))}</span></button></div>`);
+        if (st.locked) states.push(`<div class="facets-stage-state"><span>${esc(t('stage_locked_note'))}</span><button type="button" class="facets-btn facets-small" data-act="stage-unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button></div>`);
+        const kind = t(screenKind() === 'narrow' ? 'stage_kind_narrow' : 'stage_kind_wide');
+        tools = `${states.join('')}
+        <div class="facets-btnrow facets-main-tools">
           <button type="button" class="facets-btn facets-small facets-jellybtn" data-act="border" data-pid="${esc(key)}"><i class="fa-solid fa-wand-magic-sparkles"></i><span>${esc(t('border_btn'))}</span></button>
           <span class="facets-btnrow-gap"></span>
           <span class="facets-turnrow">
@@ -513,15 +532,25 @@ function roomOutfits(key) {
           </span>
           <button type="button" class="facets-iconbtn facets-pin-opt${st.flip ? ' on' : ''}" data-act="stage-flip-btn" aria-pressed="${!!st.flip}" title="${esc(t('stage_flip'))}" aria-label="${esc(t('stage_flip'))}"><i class="fa-solid fa-arrows-left-right"></i></button>
           <button type="button" class="facets-iconbtn" data-act="stage-reset" title="${esc(`${t('stage_reset')} · ${t('stage_reset_note', { kind })}`)}" aria-label="${esc(t('stage_reset'))}"><i class="fa-solid fa-arrows-to-dot"></i></button>
-        </div>
+        </div>`;
+    }
+    const main = `<div class="facets-mainpin${st.on ? ' is-on' : ''}">
+        <div class="facets-hist-row facets-pin-row facets-main-row${st.on ? ' is-pinned' : ''}">
+          <div class="facets-hist-thumb"><img src="${esc(thumbOf(key, now))}" alt="" draggable="false"></div>
+          <div class="facets-hist-text">
+            <div class="facets-hist-name">${esc(t('stage_main_title'))}</div>
+            <div class="facets-hist-time">${esc(sub)}</div>
+          </div>
+          ${tail}
+        </div>${tools}
       </div>`;
-    return `${main}${pinSection(key)}<div class="facets-note">${esc(t('stage_how'))}</div>`;
+    return `${pinSection(key, main)}<div class="facets-note">${esc(t('stage_how'))}</div>`;
 }
 
 /** 📌 Pictures pinned in this chat, and saved layouts. Only inside a chat. */
-function pinSection(key) {
+function pinSection(key, main = '') {
     const title = `<div class="facets-card-title">${esc(t('pin_title'))}</div>`;
-    if (!chatAvailable()) return `<div class="facets-card">${title}<div class="facets-note">${esc(t('pin_need_chat'))}</div></div>`;
+    if (!chatAvailable()) return `<div class="facets-card">${title}${main}<div class="facets-note">${esc(t('pin_need_chat'))}</div></div>`;
     const chatKey = currentScene().chatKey;
     const e = getEntity(key);
     const pins = pinsOf(chatKey, key);
@@ -554,6 +583,7 @@ function pinSection(key) {
     const hasSome = pins.length > 0 || !!frameOf(chatKey, key);
     const canSave = hasSome && layouts.length < MAX_LAYOUTS;
     return `<div class="facets-card">${title}
+        ${main}
         <div class="facets-note">${esc(t('pin_note', { n: pins.length, max: MAX_PINS }))}</div>
         ${rows || `<div class="facets-note">${esc(t('pin_no_outfits'))}</div>`}
       </div>
@@ -853,21 +883,22 @@ async function loadLayoutHere(id) {
 }
 
 /** One line under "Tell the AI": is the look being sent right now, and why not. */
-function aiStateHtml(key, chatKey) {
-    if (!settings().tellAI || !chatKey) return '';
+/** What the AI is told about this outfit right now: { text, on, btn } (null when there is nothing to say). */
+function aiState(key, chatKey) {
+    if (!settings().tellAI || !chatKey) return null;
     const st = tellStatus(key, chatKey);
     const n = settings().tellCount;
     const text = {
         notchat: t('ai_notchat'), default: t('ai_default'), empty: t('ai_empty'),
         always: t('ai_always'), sending: t('ai_sending', { n: st.left }), muted: t('ai_muted'),
-        done: t('ai_done', { n }), none: t('ai_none'),
+        done: t('ai_done', { n }), none: t('ai_none'), auto: t('ai_auto'),
     }[st.kind];
-    if (!text) return '';
+    if (!text) return null;
     const on = st.kind === 'sending' || st.kind === 'always';
     let btn = '';
     if (st.kind === 'sending') btn = `<button type="button" class="facets-btn facets-small" data-act="ai-mute">${esc(t('ai_mute'))}</button>`;
-    else if (['muted', 'done', 'none'].includes(st.kind)) btn = `<button type="button" class="facets-btn facets-small" data-act="ai-again"><i class="fa-solid fa-rotate-right"></i><span>${esc(t('ai_again'))}</span></button>`;
-    return `<div class="facets-aistate${on ? ' is-on' : ''}"><span class="facets-aistate-dot" aria-hidden="true"></span><span class="facets-aistate-text">${esc(text)}</span>${btn}</div>`;
+    else if (['muted', 'done', 'none'].includes(st.kind) || st.kind === 'auto') btn = `<button type="button" class="facets-btn facets-small" data-act="ai-again"><i class="fa-solid fa-rotate-right"></i><span>${esc(t('ai_again'))}</span></button>`;
+    return { text, on, btn };
 }
 
 function viewHistory() {
@@ -1274,6 +1305,10 @@ function viewSettings() {
               ${[1, 3, 5, 0].map(n => `<option value="${n}"${settings().tellCount === n ? ' selected' : ''}>${esc(n ? t('tell_count_n', { n }) : t('tell_count_always'))}</option>`).join('')}
             </select>
           </label>
+          <div class="facets-note">${esc(t('auto_no_tell'))}</div>
+        </div>
+        <div class="facets-section">
+          ${toggleRow('sinceMode', t('since_label'), t('since_note'))}
         </div>
         <div class="facets-section">
           <div class="facets-stitle">${esc(t('auto_title'))}</div>
@@ -1792,6 +1827,7 @@ function onClick(e) {
         case 'ignore-reset': settings().ignoreWords = DEFAULT_IGNORE; save(); render(); break;
         case 'history-delete': removePoint(Number(el.dataset.t)); break;
         case 'ai-mute': muteTell(currentScene().chatKey, activeKey()); applyAllSoon(); render(); break;
+        case 'more': settings().moreOpen = !settings().moreOpen; save(); render(); break;
         case 'ai-again': tellAgain(currentScene().chatKey, activeKey()); applyAllSoon(); render(); break;
         case 'drawers': state.screen = 'drawers'; render(); break;
         case 'drawers-done': state.screen = 'organize'; render(); break;
@@ -1811,6 +1847,15 @@ function onClick(e) {
             if (el.dataset.to === 'room') { state.roomFrom = 'booth'; state.roomTab = 'outfits'; }
             state.screen = el.dataset.to === 'frame' ? 'frame' : 'room';
             render(); break;
+        case 'stage-on-btn': case 'stage-off': {
+            const key = activeKey();
+            if (!key) break;
+            entityFor(key);
+            const st = stageOf(key, true);
+            st.on = act === 'stage-on-btn';
+            if (st.on) st.hidden = false; // putting it in always shows it
+            save(); applyAllSoon(); render(); break;
+        }
         case 'stage-flip-btn': {
             const key = activeKey();
             if (!key) break;

@@ -3,7 +3,7 @@
 
 import {
     ctx, settings, charKey, personaKey, effectiveOutfit, chatOnlyOutfit, chatKeyFor, findOutfit, chatChoice,
-    outfitAt, tellOf, setupBranch, DEFAULT_MARK, frameOf,
+    outfitAt, tellOf, setupBranch, DEFAULT_MARK, frameOf, timelineOf,
 } from './store.js';
 import { urlOf } from './images.js';
 import { frameCss } from './deco.js';
@@ -332,6 +332,12 @@ function repliesSince(since, skipLast) {
  * Whether the look of one entity is being described to the AI in the open chat.
  * kind: off | nochat | notchat | default | empty | always | sending | muted | done | none
  */
+function isAutoNow(entityKey, chatKey) {
+    const tl = timelineOf(chatKey, entityKey);
+    const last = tl?.points[tl.points.length - 1];
+    return !!last?.src;
+}
+
 export function tellStatus(entityKey, chatKey, skipLast = false) {
     const s = settings();
     if (!s.tellAI) return { kind: 'off' };
@@ -342,8 +348,11 @@ export function tellStatus(entityKey, chatKey, skipLast = false) {
     const o = chatOnlyOutfit(entityKey, chatKey);
     const desc = o?.desc?.trim() || '';
     if (!desc) return { kind: 'empty' };
-    if (!s.tellCount) return { kind: 'always', desc };
     const cell = tellOf(chatKey, entityKey);
+    // 0.9.1: an outfit put on by 🎲 or 🔑 is never told (not even with "every time"),
+    // unless the user pressed [Tell again] afterwards.
+    if (isAutoNow(entityKey, chatKey) && !cell) return { kind: 'auto' };
+    if (!s.tellCount) return { kind: 'always', desc };
     if (!cell) return { kind: 'none', desc };
     if (cell.muted) return { kind: 'muted', desc };
     const left = s.tellCount - repliesSince(cell.t, skipLast);

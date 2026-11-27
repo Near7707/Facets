@@ -481,9 +481,13 @@ function openTools(key) {
     if (!st || !layer) return;
     closeTools();
     toolsKey = key;
-    syncTheme(layer);
+    const dark = syncTheme(layer);
     const bar = document.createElement('div');
     bar.className = st.locked ? 'facets-stage-tools is-locked' : 'facets-stage-tools';
+    // 0.9.1: the bar and its handles wear the Facets look too, unless "Follow SillyTavern theme" is on.
+    layer.classList.toggle('facets-stage-ft', !settings().followTheme);
+    layer.classList.toggle('is-dark', !settings().followTheme && dark);
+    layer.classList.toggle('is-light', !settings().followTheme && !dark);
     bar.dataset.key = key;
     const rot = placeNow(key).rot || 0;
     bar.innerHTML = st.locked
@@ -494,7 +498,7 @@ function openTools(key) {
            <div class="facets-stage-row2">
              ${ico('rot-left', 'fa-rotate-left', t('stage_rot_left'))}${ico('rot-right', 'fa-rotate-right', t('stage_rot_right'))}
              <span class="facets-stage-sep" aria-hidden="true"></span>
-             ${ico('lock', 'fa-lock', t('stage_lock'))}${ico('hide', 'fa-arrow-right-to-bracket', t('stage_hide'))}${ico('remove', 'fa-xmark', `${t('stage_remove')} · ${t(splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main')}`)}
+             ${ico('lock', 'fa-lock', t('stage_lock'))}${ico('hide', 'fa-arrow-right-to-bracket', t('stage_hide'))}${ico('remove', 'fa-trash-can', `${t('stage_remove')} · ${t(splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main')}`)}
            </div>`;
     layer.appendChild(bar);
     if (!st.locked) {
