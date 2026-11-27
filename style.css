@@ -1973,3 +1973,10 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-t-diary .facets-btile-stamp { padding: 3px 7px 2px; border: 1.5px solid currentColor; border-radius: 50px; background: rgba(255, 255, 255, 0.5); transform: rotate(-8deg); opacity: 0.85; }
 .facets-t-diary.is-dark .facets-btile-stamp { background: rgba(0, 0, 0, 0.2); }
 .facets-t-holo .facets-btile-tag, .facets-t-diary .facets-btile-tag { display: none; }
+
+/* ================= 0.9.7 own font =================
+   Holo, Clean and Diary use the device's own fonts (no download): Apple SD Gothic Neo on
+   iPhone / Mac, Malgun Gothic on Windows. "Follow SillyTavern" keeps SillyTavern's font. */
+.facets-sheet.facets-ft {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+}
