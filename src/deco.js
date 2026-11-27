@@ -235,10 +235,23 @@ export function paintPiece(f, deco, g = {}) {
 
 const BOW = (c) => svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 26"><g stroke="#fff" stroke-width="1.6"><path d="M22 13C14 2 4 2 3 9c-1 7 9 9 19 4Z" fill="${c}"/><path d="M22 13c8-11 18-11 19-4 1 7-9 9-19 4Z" fill="${c}"/><path d="M20 14l-6 11 5-1 3-9Zm4 0 6 11-5-1-3-9Z" fill="${c}"/><circle cx="22" cy="13" r="4.2" fill="${c}"/></g></svg>`);
 const HEART = (c) => svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 96"><path d="${HEART_PATH}" fill="${c}" stroke="#fff" stroke-width="8"/></svg>`);
-const STARS = (c) => svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 40"><g fill="${c}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><path d="${starPath(44, 16, 14, 6.5)}"/><path d="${starPath(24, 10, 8, 3.7)}"/><path d="${starPath(54, 34, 6, 2.8)}"/></g></svg>`);
-const SPARKLES = (c) => {
-    const sp = (x, y, r) => `M${x} ${y - r}C${x + r * 0.18} ${y - r * 0.18} ${x + r * 0.18} ${y - r * 0.18} ${x + r} ${y}C${x + r * 0.18} ${y + r * 0.18} ${x + r * 0.18} ${y + r * 0.18} ${x} ${y + r}C${x - r * 0.18} ${y + r * 0.18} ${x - r * 0.18} ${y + r * 0.18} ${x - r} ${y}C${x - r * 0.18} ${y - r * 0.18} ${x - r * 0.18} ${y - r * 0.18} ${x} ${y - r}Z`;
-    return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g fill="${c}" stroke="#fff" stroke-width="1.2"><path d="${sp(10, 12, 10)}"/><path d="${sp(90, 20, 7)}"/><path d="${sp(88, 86, 11)}"/><path d="${sp(12, 88, 6)}"/></g></svg>`);
+// 0.9.3: sparkles twinkle one by one, each on its own beat, inside the SVG (no more whole-layer pulsing).
+const TWINKLE = '<style>.t{transform-box:fill-box;transform-origin:center;animation:t var(--d) ease-in-out infinite;animation-delay:var(--l)}'
+    + '.g{animation:g var(--d) ease-in-out infinite;animation-delay:var(--l)}'
+    + '@keyframes t{0%,100%{opacity:.2;transform:scale(.8)}45%,60%{opacity:1;transform:scale(1)}}'
+    + '@keyframes g{0%,100%{opacity:.25}50%{opacity:1}}</style>';
+const beat = (blink, cls, d, l) => blink ? ` class="${cls}" style="--d:${d}s;--l:${l}s"` : '';
+const spark = (x, y, r) => `M${x} ${y - r}C${x + r * 0.18} ${y - r * 0.18} ${x + r * 0.18} ${y - r * 0.18} ${x + r} ${y}C${x + r * 0.18} ${y + r * 0.18} ${x + r * 0.18} ${y + r * 0.18} ${x} ${y + r}C${x - r * 0.18} ${y + r * 0.18} ${x - r * 0.18} ${y + r * 0.18} ${x - r} ${y}C${x - r * 0.18} ${y - r * 0.18} ${x - r * 0.18} ${y - r * 0.18} ${x} ${y - r}Z`;
+const STARS = (c, blink) => svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 40">${blink ? TWINKLE : ''}<g fill="${c}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><path${beat(blink, 't', 2.6, 0)} d="${starPath(44, 16, 14, 6.5)}"/><path${beat(blink, 't', 2.2, -0.9)} d="${starPath(24, 10, 8, 3.7)}"/><path${beat(blink, 't', 3, -1.7)} d="${starPath(54, 34, 6, 2.8)}"/></g></svg>`);
+// Glitter dust: small dots around the picture and two sparkles (big top right, small bottom left).
+const GLITTER_DOTS = [[200, 46, 2.4, 1.6, 0], [245, 47, 2, 2.1, -0.5], [290, 46, 2.3, 1.8, -1], [338, 47, 2, 2.4, -0.2], [22, 46, 2.4, 1.7, -0.8], [68, 47, 2, 2.2, -1.3], [112, 46, 2.3, 1.9, -0.6], [158, 47, 2, 2.5, -1.5]];
+const SPARKLES = (c, blink) => {
+    const dots = GLITTER_DOTS.map(([deg, r, size, d, l]) => {
+        const a = (deg - 90) * Math.PI / 180;
+        const cx = (50 + r * Math.cos(a)).toFixed(1), cy = (50 + r * Math.sin(a)).toFixed(1);
+        return `<circle${beat(blink, 'g', d, l)} cx="${cx}" cy="${cy}" r="${size}"/>`;
+    }).join('');
+    return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${blink ? TWINKLE : ''}<g fill="${c}" stroke="#fff" stroke-width="0.8">${dots}<path${beat(blink, 't', 2.6, 0)} d="${spark(86, 12, 9)}"/><path${beat(blink, 't', 3, -1.2)} d="${spark(13, 85, 6)}"/></g></svg>`);
 };
 
 /** Ring radius just outside an avatar with the given radius ("50%" or "10px"). */
@@ -265,7 +278,9 @@ export function frameCss(sel, imgSel, fr, radius, box) {
     const { x, y, w, h } = box;
     const at = (l, t, ww, hh) => `left:${Math.round(l)}px;top:${Math.round(t)}px;width:${Math.round(ww)}px;height:${Math.round(hh)}px;`;
     const ring = (bg, g = 3, extra = '') => `${sel}::before{content:'';position:absolute;z-index:0;pointer-events:none;${at(x - g, y - g, w + g * 2, h + g * 2)}border-radius:${outerRadius(R, g)};background:${bg};box-shadow:0 2px 6px rgba(0,0,0,.35);${extra}}`;
-    const deco = (bg, pos, blink) => `${sel}::after{content:'';position:absolute;z-index:2;pointer-events:none;background:${bg} center/contain no-repeat;${pos}${blink ? 'animation:facets-twinkle 1.6s ease-in-out infinite;' : ''}}`;
+    // Twinkling lives inside the SVG; "reduce motion" swaps in the still picture.
+    const deco = (bg, pos, still) => `${sel}::after{content:'';position:absolute;z-index:2;pointer-events:none;background:${bg} center/contain no-repeat;${pos}}`
+        + (still ? `@media (prefers-reduced-motion: reduce){${sel}::after{background-image:${still};}}` : '');
     let css = `${sel}{position:relative;}${imgSel}{position:relative;z-index:1;}`;
     switch (f.kind) {
         case 'polaroid':
@@ -281,7 +296,7 @@ export function frameCss(sel, imgSel, fr, radius, box) {
             css += ring(c) + deco(HEART(c), at(x + w - 12, y + h - 13, 20, 19));
             break;
         case 'sparkle':
-            css += ring(patternBg('glitter', c), 4) + deco(SPARKLES(isLight(c) ? '#ffe36b' : '#fff'), at(x - 11, y - 11, w + 22, h + 22), f.blink);
+            css += ring(patternBg('glitter', c), 4) + deco(SPARKLES(isLight(c) ? '#ffe36b' : '#fff', f.blink), at(x - 11, y - 11, w + 22, h + 22), f.blink && SPARKLES(isLight(c) ? '#ffe36b' : '#fff', false));
             break;
         case 'rainbow':
             css += ring(RAINBOW, 4);
@@ -290,10 +305,10 @@ export function frameCss(sel, imgSel, fr, radius, box) {
             css += ring(`repeating-conic-gradient(${c} 0 15deg, ${second(c)} 15deg 30deg)`, 4);
             break;
         case 'star':
-            css += ring(c) + deco(STARS(c), at(x + w - 20, y - 12, 32, 22), f.blink);
+            css += ring(c) + deco(STARS(c, f.blink), at(x + w - 20, y - 12, 32, 22), f.blink && STARS(c, false));
             break;
         case 'holo':
-            css += ring(`${HOLO} 0 0/200% 200%`, 4, 'animation:facets-holo 6s linear infinite;') + deco(SPARKLES('#ffffff'), at(x - 9, y - 9, w + 18, h + 18), f.blink);
+            css += ring(`${HOLO} 0 0/200% 200%`, 4, 'animation:facets-holo 6s linear infinite;') + deco(SPARKLES('#ffffff', f.blink), at(x - 9, y - 9, w + 18, h + 18), f.blink && SPARKLES('#ffffff', false));
             break;
         default: return '';
     }
