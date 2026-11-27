@@ -1,6 +1,7 @@
 // Facets data lives only in extension settings (never in cards, chat files or chat metadata).
 
 import { cleanDeco, cleanFrame, STICKER_DECO } from './deco.js';
+import { LOOKS, BASIC_IDS, MAX_STICKERS } from './stickers.js';
 
 export const MODULE = 'facets';
 export const FORMAT = 1;
@@ -51,6 +52,14 @@ const DEFAULTS = Object.freeze({
     pinMemo: {},
     // Avatar frames (0.8.0): chatKey -> { entityKey: Frame }
     frames: {},
+    // Stickers stuck on a chat (0.10.0): chatKey -> { '*': Sticker[] }. The fixed key '*' (not a character or
+    // persona) lets renames, deletes, branches and backups follow the chat like the other chat tables.
+    stickers: {},
+    // Your own sticker pictures (0.10.0), shared by every chat: [{ id, path, name }]
+    myStickers: [],
+    // Look picked for new stickers (0.10.0)
+    stickerLook: 'gloss',
+    stickerSpark: true,
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -92,7 +101,7 @@ export function migrate(s) {
     if (typeof s.format !== 'number') s.format = FORMAT;
     // Future format upgrades go here: if (s.format < 2) { ...; s.format = 2; }
     if (!Array.isArray(s.files)) s.files = [];
-    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo', 'frames']) {
+    for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo', 'frames', 'stickers']) {
         if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
     }
     for (const [ck, row] of Object.entries(s.pins)) {
@@ -128,6 +137,21 @@ export function migrate(s) {
         }
         if (!Object.keys(row).length) delete s.frames[ck];
     }
+    // Stickers (0.10.0). Cleaned once, then kept as they are (same reason as above).
+    if (!Array.isArray(s.myStickers)) s.myStickers = [];
+    if (!cleaned.has(s.myStickers)) {
+        s.myStickers = s.myStickers.filter(m => m && typeof m.id === 'string' && m.id && typeof m.path === 'string' && m.path)
+            .map(m => ({ id: m.id, path: m.path, name: typeof m.name === 'string' ? m.name.slice(0, 40) : '' }));
+        cleaned.add(s.myStickers);
+    }
+    for (const [ck, row] of Object.entries(s.stickers)) {
+        const list = row && typeof row === 'object' ? row[STICKER_KEY] : null;
+        if (Array.isArray(list) && list.length && cleaned.has(list)) continue;
+        const clean = Array.isArray(list) ? list.map(cleanSticker).filter(Boolean).slice(0, MAX_STICKERS) : [];
+        if (clean.length) { s.stickers[ck] = { [STICKER_KEY]: clean }; cleaned.add(clean); } else delete s.stickers[ck];
+    }
+    if (!LOOKS.includes(s.stickerLook)) s.stickerLook = 'gloss';
+    if (typeof s.stickerSpark !== 'boolean') s.stickerSpark = true;
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 1;
     if (!THEMES.includes(s.theme)) s.theme = 'st';
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
@@ -155,6 +179,8 @@ export function migrate(s) {
                 l.pins = Array.isArray(l.pins) ? l.pins.map(cleanPin).filter(Boolean).slice(0, MAX_PINS) : [];
                 // 0.8.0: a layout also keeps the avatar frame (null = no frame). Older layouts have none.
                 if ('frame' in l) l.frame = cleanFrame(l.frame);
+                // 0.10.0: and the chat's stickers. Older layouts have none (loading them leaves stickers alone).
+                if ('stickers' in l) l.stickers = Array.isArray(l.stickers) ? l.stickers.map(cleanSticker).filter(Boolean).slice(0, MAX_STICKERS) : [];
             }
             cleaned.add(e.layouts);
         }
@@ -310,12 +336,14 @@ export function saveLayout(entityKey, chatKey, name) {
     const e = getEntity(entityKey);
     const pins = pinsOf(chatKey, entityKey);
     const frame = frameOf(chatKey, entityKey);
-    if (!e || (!pins.length && !frame)) return null;
+    const stickers = stickersOf(chatKey);
+    if (!e || (!pins.length && !frame && !stickers.length)) return null;
     if (!Array.isArray(e.layouts)) e.layouts = [];
     if (e.layouts.length >= MAX_LAYOUTS) return null;
     const layout = {
         id: newId(), name: String(name || '').trim().slice(0, 40), pins: structuredClone(pins),
         frame: frame ? structuredClone(frame) : null,
+        stickers: structuredClone(stickers),
     };
     e.layouts.push(layout);
     save();
@@ -323,8 +351,8 @@ export function saveLayout(entityKey, chatKey, name) {
 }
 
 /**
- * Put a saved layout into this chat (replaces the pins already there, and the avatar frame if the layout has one).
- * Returns { pins: how many were placed, frame: whether the frame was set }.
+ * Put a saved layout into this chat (replaces the pins already there, and the avatar frame / stickers if the layout has them).
+ * Returns { pins: how many were placed, frame: whether the frame was set, stickers: how many (-1 = none in the layout) }.
  */
 export function loadLayout(entityKey, chatKey, layoutId) {
     const e = getEntity(entityKey);
@@ -343,8 +371,17 @@ export function loadLayout(entityKey, chatKey, layoutId) {
     }
     const frame = 'frame' in layout;
     if (frame) putFrame(s, chatKey, entityKey, layout.frame);
+    // 0.10.0: a layout with stickers replaces the chat's stickers (your own stickers that are gone are left out).
+    let stickers = -1;
+    if ('stickers' in layout) {
+        const mine = new Set(s.myStickers.map(m => m.id));
+        const sl = layout.stickers.filter(k => k.kind === 'basic' || mine.has(k.ref)).slice(0, MAX_STICKERS)
+            .map(k => ({ ...structuredClone(k), id: newId() }));
+        putStickers(s, chatKey, sl);
+        stickers = sl.length;
+    }
     save();
-    return { pins: list.length, frame };
+    return { pins: list.length, frame, stickers };
 }
 
 // ---- Avatar frames (0.8.0): per chat, character and persona apart ----
@@ -383,6 +420,93 @@ export function deleteLayout(entityKey, layoutId) {
     if (!e?.layouts) return;
     e.layouts = e.layouts.filter(l => l.id !== layoutId);
     save();
+}
+
+// ---- Stickers (0.10.0) ----
+// Sticker = Stage without "on", plus { id, kind: 'basic' | 'mine', ref: basic sticker id | your sticker's id,
+//   look: 'jelly' | 'cut' | 'gloss', spark }. Up to MAX_STICKERS per chat, apart from the 6 outfit pictures.
+
+export const STICKER_KEY = '*';
+
+function cleanSticker(k) {
+    if (!k || typeof k !== 'object') return null;
+    const kind = k.kind === 'mine' ? 'mine' : 'basic';
+    if (typeof k.ref !== 'string' || !k.ref || (kind === 'basic' && !BASIC_IDS.includes(k.ref))) return null;
+    const st = cleanStage(k);
+    delete st.on;
+    delete st.pose;
+    return {
+        id: typeof k.id === 'string' && k.id ? k.id : newId(), kind, ref: k.ref,
+        look: LOOKS.includes(k.look) ? k.look : 'gloss', spark: k.spark === true, ...st,
+    };
+}
+
+/** Stickers of one chat (a live array; empty if none). */
+export function stickersOf(chatKey) {
+    return chatKey ? settings().stickers[chatKey]?.[STICKER_KEY] || [] : [];
+}
+
+export function findSticker(chatKey, id) {
+    return stickersOf(chatKey).find(k => k.id === id) || null;
+}
+
+// Takes s (see dropMemo): settings() in between would tidy away a list being filled.
+function putStickers(s, chatKey, list) {
+    if (list.length) {
+        s.stickers[chatKey] = { [STICKER_KEY]: list };
+        cleaned.add(list);
+    } else delete s.stickers[chatKey];
+}
+
+/** Stick one sticker on this chat. Returns it, or null when full / unknown. */
+export function addSticker(chatKey, kind, ref, look, spark) {
+    if (!chatKey) return null;
+    const s = settings();
+    if (kind === 'mine' && !s.myStickers.some(m => m.id === ref)) return null;
+    const list = s.stickers[chatKey]?.[STICKER_KEY] || [];
+    if (list.length >= MAX_STICKERS) return null;
+    const k = cleanSticker({ kind, ref, look, spark });
+    if (!k) return null;
+    putStickers(s, chatKey, [...list, k]);
+    save();
+    return k;
+}
+
+export function removeSticker(chatKey, id) {
+    const s = settings();
+    const list = s.stickers[chatKey]?.[STICKER_KEY];
+    if (!list) return;
+    putStickers(s, chatKey, list.filter(k => k.id !== id));
+    save();
+}
+
+/** Add one of your own sticker pictures (already uploaded). */
+export function addMySticker(path, name = '') {
+    const s = settings();
+    const m = { id: newId(), path, name: String(name || '').slice(0, 40) };
+    s.myStickers = [...s.myStickers, m];
+    cleaned.add(s.myStickers);
+    save();
+    return m;
+}
+
+/** Remove one of your own stickers from the list, every chat and every layout. Returns its file path. */
+export function removeMySticker(id) {
+    const s = settings();
+    const m = s.myStickers.find(x => x.id === id);
+    if (!m) return '';
+    s.myStickers = s.myStickers.filter(x => x.id !== id);
+    cleaned.add(s.myStickers);
+    const gone = (k) => k.kind === 'mine' && k.ref === id;
+    for (const ck of Object.keys(s.stickers)) {
+        const list = s.stickers[ck]?.[STICKER_KEY] || [];
+        if (list.some(gone)) putStickers(s, ck, list.filter(k => !gone(k)));
+    }
+    for (const e of Object.values(s.entities)) {
+        for (const l of e.layouts || []) if (Array.isArray(l.stickers)) l.stickers = l.stickers.filter(k => !gone(k));
+    }
+    save();
+    return m.path;
 }
 
 /** UI language: the user's own pick, or SillyTavern's language (Korean → ko, anything else → en). */
@@ -514,7 +638,7 @@ export function deleteDrawer(entityKey, drawerId) {
 }
 
 // Tables keyed by chat, each row keyed by entity.
-export const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins', 'pinMemo', 'frames'];
+export const CHAT_TABLES = ['chats', 'timelines', 'tells', 'randoms', 'pins', 'pinMemo', 'frames', 'stickers'];
 // What a "whole character" change resets (the "random each reply" switch stays on).
 const PICK_TABLES = ['chats', 'timelines', 'tells'];
 
@@ -931,5 +1055,6 @@ export function unusedFiles() {
     for (const e of Object.values(s.entities)) {
         for (const o of e.outfits) { if (o.orig) used.add(o.orig); if (o.sq) used.add(o.sq); }
     }
+    for (const m of s.myStickers) used.add(m.path); // 0.10.0: your own stickers are not "pictures nobody uses"
     return s.files.filter(p => p && !used.has(p));
 }

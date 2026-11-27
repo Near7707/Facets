@@ -10,8 +10,10 @@ import {
     removeEntity, moveEntity, unusedFiles, stageOf,
     pinsOf, addPin, removePin, layoutsOf, saveLayout, loadLayout, renameLayout, deleteLayout, MAX_PINS, MAX_LAYOUTS,
     frameOf, setFrame, THEMES,
+    stickersOf, addSticker, removeSticker, addMySticker, removeMySticker, STICKER_KEY,
 } from './store.js';
-import { resetPlace, screenKind, turnPiece, rotOf, pieceInfo, redrawPiece } from './stage.js';
+import { resetPlace, screenKind, turnPiece, rotOf, pieceInfo, redrawPiece, stickerSrc, paintSticker } from './stage.js';
+import { BASIC_IDS, LOOKS, MAX_STICKERS, basicUrl } from './stickers.js';
 import {
     PATTERNS, SHAPES, WIDTHS, COLORS, FIXED_COLOR, FRAME_KINDS, FRAME_FIXED_COLOR, FRAME_BLINK,
     cleanDeco, cleanColor, patternBg, paintPiece, isCutShape, frameCss, coverBox, ZOOM_MAX,
@@ -49,6 +51,7 @@ const state = {
     roomTab: 'outfits', // outfits | stickers
     borderPid: '', // piece whose border is being edited
     frameColor: COLORS[1], // colour picked before a frame is chosen
+    stickerEdit: false, // 0.10.0: [Organize] on My stickers (shows 🗑)
     settingsFrom: 'wardrobe', // 0.9.2: ⚙ can be opened from the Photo Booth too
     dark: true, // 0.9.0: SillyTavern's theme is dark (Facets' own look follows it)
 };
@@ -182,6 +185,7 @@ export function openWardrobe({ fromSettings = false } = {}) {
     state.editId = null;
     state.draft = null;
     state.drawer = '';
+    state.stickerEdit = false;
     if (!chatAvailable()) state.scope = 'all';
     else state.scope = 'chat';
     root.hidden = false;
@@ -500,12 +504,12 @@ function viewBooth() {
     const tiles = [
         tile('room', 'wand', 'booth_room', 'pink'),
         tile('frame', 'portrait', 'booth_frame', 'lav'),
-        tile('', 'heart', 'booth_stickers', 'cherry'),
+        tile('stickers', 'heart', 'booth_stickers', 'cherry'),
         tile('', 'card', 'booth_card', 'sky'),
         tile('', 'film', 'booth_strip', 'gold'),
         tile('', 'book', 'booth_book', 'silver'),
     ];
-    const body = `<div class="facets-booth-strip">${kicker(t('booth_label'))}<span class="facets-count">${esc(t('booth_count', { open: 2, soon: 4 }))}</span></div>
+    const body = `<div class="facets-booth-strip">${kicker(t('booth_label'))}<span class="facets-count">${esc(t('booth_count', { open: 3, soon: 3 }))}</span></div>
       <div class="facets-btiles">${tiles.join('')}</div>`;
     return [`${headSwitch('booth')}${settingsButton()}`, body, ''];
 }
@@ -548,20 +552,156 @@ function viewRoom() {
     const key = activeKey();
     const tabs = `<div class="facets-roomtabs" role="tablist">
         <button type="button" role="tab" class="facets-roomtab${state.roomTab === 'outfits' ? ' on' : ''}" data-act="room-tab" data-tab="outfits" aria-selected="${state.roomTab === 'outfits'}"><i class="fa-solid fa-shirt"></i><span>${esc(t('room_tab_outfits'))}</span></button>
-        <button type="button" role="tab" class="facets-roomtab${state.roomTab === 'stickers' ? ' on' : ''}" data-act="room-tab" data-tab="stickers" aria-selected="${state.roomTab === 'stickers'}"><i class="fa-solid fa-heart"></i><span>${esc(t('room_tab_stickers'))}</span><em>${esc(t('booth_soon'))}</em></button>
+        <button type="button" role="tab" class="facets-roomtab${state.roomTab === 'stickers' ? ' on' : ''}" data-act="room-tab" data-tab="stickers" aria-selected="${state.roomTab === 'stickers'}"><i class="fa-solid fa-heart"></i><span>${esc(t('room_tab_stickers'))}</span></button>
       </div>`;
     let inner;
-    if (state.roomTab === 'stickers') {
-        inner = `<div class="facets-card facets-soon-card"><span class="facets-jelly facets-jelly-cherry"><i class="fa-solid fa-heart"></i></span><div>${esc(t('room_stickers_soon'))}</div></div>`;
+    const stickers = state.roomTab === 'stickers';
+    if (stickers) {
+        inner = roomStickers();
     } else if (!key) {
         const sc = currentScene();
         inner = emptyNote(!state.fromSettings && sc.inGroup ? 'group_unsupported' : state.tab === 'char' ? 'no_character' : 'no_persona');
     } else {
         inner = roomOutfits(key);
     }
-    const body = `${whoPicker()}${tabs}<div class="facets-stack">${inner}</div>`;
+    // 0.10.0: stickers belong to the chat, not to a character, so the [Character | Me] row is left out there.
+    const body = `${stickers ? '' : whoPicker()}${tabs}<div class="facets-stack">${inner}</div>`;
     const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
     return [boothHead('room_title'), body, foot];
+}
+
+// ----- stickers (0.10.0) -----
+
+const stickerName = (k) => {
+    if (k.kind === 'basic') return t(`stk_${k.ref}`);
+    const list = settings().myStickers;
+    const i = list.findIndex(m => m.id === k.ref);
+    return list[i]?.name || t('stk_mine_n', { n: i + 1 });
+};
+
+function roomStickers() {
+    const s = settings();
+    const look = s.stickerLook;
+    const spark = s.stickerSpark;
+    const chatKey = chatAvailable() ? currentScene().chatKey : null;
+    const placed = chatKey ? stickersOf(chatKey) : [];
+    const full = placed.length >= MAX_STICKERS;
+    const lock = chatKey && !full ? '' : ' disabled';
+    // ON THIS CHAT: what is stuck here now (small ✕ = take it off).
+    let here;
+    if (!chatKey) {
+        here = `<div class="facets-note">${esc(t('stk_need_chat'))}</div>`;
+    } else {
+        const thumbs = placed.map(k => {
+            const pid = `${STICKER_KEY}\n${k.id}`;
+            const name = stickerName(k);
+            return `<div class="facets-stk-on">
+                <button type="button" class="facets-stk-onpic" data-act="border" data-pid="${esc(pid)}" title="${esc(`${name} · ${t('border_btn')}`)}" aria-label="${esc(`${name} · ${t('border_btn')}`)}">
+                  <img src="${esc(stickerSrc(k, false))}" alt="" draggable="false" style="transform:rotate(${Math.round(rotOf(pid))}deg)"></button>
+                <button type="button" class="facets-stk-x" data-act="stk-remove" data-id="${esc(k.id)}" title="${esc(t('stk_remove', { name }))}" aria-label="${esc(t('stk_remove', { name }))}"><i class="fa-solid fa-xmark"></i></button>
+              </div>`;
+        }).join('');
+        here = `${placed.length ? `<div class="facets-stk-onrow">${thumbs}</div>` : `<div class="facets-note">${esc(t('stk_none_here'))}</div>`}
+          <div class="facets-note">${esc(t('stk_here_note'))}</div>`;
+    }
+    const count = chatKey ? `<span class="facets-count">${esc(t('stk_count', { n: placed.length, max: MAX_STICKERS }))}</span>` : '';
+    const onCard = `<div class="facets-card facets-stk-card"><div class="facets-closet-head">${kicker(t('stk_here_label'))}${count}</div>${here}</div>`;
+    // BASIC: pick the look first, then tap a sticker.
+    const looks = LOOKS.map(v => `<button type="button" role="radio" class="facets-segbtn${look === v ? ' on' : ''}" data-act="stk-look" data-v="${v}" aria-checked="${look === v}">${esc(t(`stk_look_${v}`))}</button>`).join('');
+    const sparkSw = `<label class="facets-toggle facets-stk-spark" title="${esc(t('stk_spark_note'))}">
+        <span class="facets-toggle-text"><span>✦ ${esc(t('stk_spark'))}</span></span>
+        <input type="checkbox" data-act="stk-spark"${spark ? ' checked' : ''}>
+        <span class="facets-switch" aria-hidden="true"></span>
+      </label>`;
+    const basic = BASIC_IDS.map(id => {
+        const name = t(`stk_${id}`);
+        return `<button type="button" class="facets-stk-tile" data-act="stk-add" data-kind="basic" data-ref="${id}" title="${esc(name)}" aria-label="${esc(t('stk_add', { name }))}"${lock}>
+            <img src="${esc(basicUrl(id, look, spark, false))}" alt="" draggable="false"><span>${esc(name)}</span></button>`;
+    }).join('');
+    const basicCard = `<div class="facets-card facets-stk-card">
+        <div class="facets-closet-head">${kicker(t('stk_basic_label'))}<span class="facets-stk-hint">${esc(t('stk_tap_hint'))}</span></div>
+        <div class="facets-stk-lookrow"><div class="facets-seg" role="radiogroup" aria-label="${esc(t('stk_look'))}">${looks}</div>${sparkSw}</div>
+        <div class="facets-stk-grid">${basic}</div>
+        <div class="facets-note">${esc(t('stk_basic_note'))}</div>
+      </div>`;
+    // MY STICKERS: your own pictures, the same in every chat.
+    const mine = s.myStickers.map((m, i) => {
+        const name = m.name || t('stk_mine_n', { n: i + 1 });
+        if (state.stickerEdit) {
+            return `<button type="button" class="facets-stk-tile is-edit" data-act="stk-del" data-id="${esc(m.id)}" title="${esc(t('stk_delete'))}" aria-label="${esc(`${t('stk_delete')} · ${name}`)}">
+                <img src="${esc(urlOf(m.path))}" alt="" draggable="false" loading="lazy"><span>${esc(name)}</span><em class="facets-stk-del" aria-hidden="true"><i class="fa-solid fa-trash-can"></i></em></button>`;
+        }
+        return `<button type="button" class="facets-stk-tile is-mine" data-act="stk-add" data-kind="mine" data-ref="${esc(m.id)}" title="${esc(name)}" aria-label="${esc(t('stk_add', { name }))}"${lock}>
+            <img src="${esc(urlOf(m.path))}" alt="" draggable="false" loading="lazy"><span>${esc(name)}</span></button>`;
+    }).join('');
+    const upload = state.stickerEdit ? '' : `<label class="facets-stk-tile facets-stk-up" role="button" tabindex="0" title="${esc(t('stk_upload'))}">
+        <span class="facets-add-plus"><i class="fa-solid fa-plus"></i></span><span>${esc(t('stk_upload'))}</span>
+        <input type="file" accept="image/*" multiple data-act="stk-upload" hidden></label>`;
+    const edit = s.myStickers.length
+        ? `<button type="button" class="facets-btn facets-small${state.stickerEdit ? ' facets-primary' : ''}" data-act="stk-edit">${esc(t(state.stickerEdit ? 'done' : 'stk_organize'))}</button>` : '';
+    const mineCard = `<div class="facets-card facets-stk-card">
+        <div class="facets-closet-head">${kicker(t('stk_mine_label'))}${edit}</div>
+        <div class="facets-stk-grid">${upload}${mine}</div>
+        <div class="facets-note">${esc(t(state.stickerEdit ? 'stk_delete_note' : 'stk_mine_note'))}</div>
+      </div>`;
+    return onCard + basicCard + mineCard + (full ? `<div class="facets-note">${esc(t('stk_full', { max: MAX_STICKERS }))}</div>` : '');
+}
+
+function stickHere(kind, ref) {
+    if (!chatAvailable()) return;
+    const s = settings();
+    if (!addSticker(currentScene().chatKey, kind, ref, s.stickerLook, s.stickerSpark)) toast('warning', t('stk_full', { max: MAX_STICKERS }));
+    applyAllSoon();
+    render();
+}
+
+/** Your own sticker pictures: made smaller (keeps see-through parts) and uploaded once, then used in every chat. */
+async function uploadStickers(files) {
+    if (!files?.length) return;
+    await withBusy(async () => {
+        const items = await readPicked([...files]);
+        let added = 0;
+        for (const it of items) {
+            const max = 512;
+            const k = Math.min(1, max / Math.max(it.img.naturalWidth || 1, it.img.naturalHeight || 1));
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(it.img.naturalWidth * k));
+            c.height = Math.max(1, Math.round(it.img.naturalHeight * k));
+            c.getContext('2d').drawImage(it.img, 0, 0, c.width, c.height);
+            let data = c.toDataURL('image/webp', 0.92);
+            if (!data.startsWith('data:image/webp')) data = c.toDataURL('image/png');
+            try {
+                const path = await uploadDataURL(data, STICKER_FOLDER, `stk_${newId()}`);
+                addMySticker(path, it.name);
+                added++;
+            } catch (err) {
+                console.error('[Facets]', err);
+                toast('error', t('upload_failed', { name: it.fileName || it.name }));
+            }
+        }
+        save();
+        if (added) toast('success', t('stk_uploaded', { n: added }));
+    }, () => toast('error', t('stk_upload_failed')));
+    render();
+}
+
+const STICKER_FOLDER = 'Facets_stickers';
+
+async function deleteMySticker(id) {
+    const list = settings().myStickers;
+    const i = list.findIndex(m => m.id === id);
+    if (i < 0) return;
+    const name = list[i].name || t('stk_mine_n', { n: i + 1 });
+    if (!(await confirmBox(t('confirm_stk_delete', { name }), t('delete')))) return;
+    await withBusy(async () => {
+        const path = removeMySticker(id);
+        save();
+        applyAllSoon();
+        if (path && !(await deletePath(path))) toast('warning', t('delete_failed'));
+        save();
+        if (!settings().myStickers.length) state.stickerEdit = false;
+    });
+    render();
 }
 
 function thumbOf(key, outfit) {
@@ -639,11 +779,11 @@ function pinSection(key, main = '') {
     const layouts = layoutsOf(key);
     const lrows = layouts.map((l, i) => `<div class="facets-drawer-row facets-layout-row">
         <input type="text" class="facets-input" data-layout-name="${esc(l.id)}" maxlength="40" value="${esc(l.name)}" placeholder="${esc(t('layout_n', { n: i + 1 }))}" aria-label="${esc(t('layout_name'))}" autocomplete="off">
-        <span class="facets-drawer-count">${esc(t(l.frame ? 'layout_count_frame' : 'layout_count', { n: l.pins.length }))}</span>
+        <span class="facets-drawer-count">${esc(layoutCount(l))}</span>
         <button type="button" class="facets-btn facets-small" data-act="layout-load" data-id="${esc(l.id)}">${esc(t('layout_load'))}</button>
         <button type="button" class="facets-iconbtn facets-danger-icon" data-act="layout-delete" data-id="${esc(l.id)}" title="${esc(t('layout_delete'))}" aria-label="${esc(t('layout_delete'))}"><i class="fa-solid fa-trash-can"></i></button>
       </div>`).join('');
-    const hasSome = pins.length > 0 || !!frameOf(chatKey, key);
+    const hasSome = pins.length > 0 || !!frameOf(chatKey, key) || stickersOf(chatKey).length > 0;
     const canSave = hasSome && layouts.length < MAX_LAYOUTS;
     return `<div class="facets-card">${title}
         ${main}
@@ -661,6 +801,14 @@ function pinSection(key, main = '') {
       </div>`;
 }
 
+/** "3 pictures · deco · 2 stickers" */
+function layoutCount(l) {
+    const parts = [t('layout_part_pics', { n: l.pins.length })];
+    if (l.frame) parts.push(t('layout_part_deco'));
+    if (l.stickers?.length) parts.push(t('layout_part_stickers', { n: l.stickers.length }));
+    return parts.join(' · ');
+}
+
 // ----- ① picture border -----
 
 function borderInfo() {
@@ -668,9 +816,10 @@ function borderInfo() {
     if (!info) return null;
     const i = state.borderPid.indexOf('\n');
     const ek = i < 0 ? state.borderPid : state.borderPid.slice(0, i);
+    if (info.sticker) return { ...info, ek, name: stickerName(info.st), who: t('stk_word'), pinned: true };
     const e = getEntity(ek);
     const name = info.outfit ? outfitLabel(info.outfit, e?.outfits.indexOf(info.outfit) ?? 0) : t('default_look');
-    return { ...info, ek, name, pinned: i >= 0 };
+    return { ...info, ek, name, who: displayName(ek), pinned: i >= 0 };
 }
 
 function viewBorder() {
@@ -707,8 +856,8 @@ function viewBorder() {
           <div class="facets-row"><button type="button" class="facets-btn" data-act="deco-center">${esc(t('border_center'))}</button><button type="button" class="facets-btn" data-act="deco-face">${esc(t('border_face'))}</button></div>
         </div>` : '';
     const body = `<div class="facets-bprev${info.pinned ? '' : ' is-main'}${cut ? ' is-movable' : ''}"><div class="facets-fig facets-bprev-fig"><img alt="" draggable="false"></div></div>
-      <div class="facets-booth-who facets-center" title="${esc(info.name)}">${esc(`${displayName(info.ek)} · ${info.name}`)}</div>
-      <div class="facets-stack">
+      <div class="facets-booth-who facets-center" title="${esc(info.name)}">${esc(`${info.who} · ${info.name}`)}</div>
+      <div class="facets-stack">${info.sticker ? stickerLookCard(info.st) : ''}
         <div class="facets-card"><div class="facets-card-title">${esc(t('border_shape'))}</div><div class="facets-chips">${shapes}</div>
           ${notes.map(n => `<div class="facets-note">${esc(n)}</div>`).join('')}
           ${moveCard}</div>
@@ -723,6 +872,27 @@ function viewBorder() {
       </div>`;
     const foot = `<div class="facets-row facets-row-split"><button type="button" class="facets-btn facets-danger" data-act="deco-none"${d ? '' : ' disabled'} title="${esc(t('border_none'))}">${esc(t('border_none'))}</button><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
     return [headTitle(t('border_title')), body, foot];
+}
+
+/** 0.10.0: the look of one sticker already in the chat (border screen). */
+function stickerLookCard(k) {
+    const looks = LOOKS.map(v => `<button type="button" role="radio" class="facets-segbtn${k.look === v ? ' on' : ''}" data-act="stk-piece-look" data-v="${v}" aria-checked="${k.look === v}">${esc(t(`stk_look_${v}`))}</button>`).join('');
+    return `<div class="facets-card"><div class="facets-card-title">${esc(t('stk_look'))}</div>
+        <div class="facets-seg" role="radiogroup" aria-label="${esc(t('stk_look'))}">${looks}</div>
+        ${sw('stk-piece-spark', !!k.spark, `✦ ${t('stk_spark')}`, t('stk_spark_note'))}
+        ${k.deco ? `<div class="facets-note">${esc(t('stk_look_deco_note'))}</div>` : ''}
+      </div>`;
+}
+
+/** Change the look of the sticker open in the border screen. */
+function setStickerLook(change) {
+    const info = borderInfo();
+    if (!info?.sticker) return;
+    Object.assign(info.st, change);
+    save();
+    redrawPiece(state.borderPid);
+    applyAllSoon();
+    render();
 }
 
 /** 7 jelly colours + "pick your own". */
@@ -756,7 +926,10 @@ function mountBorderPreview() {
         fig.style.width = `${Math.round(Math.min(H * ar, 260))}px`;
         fig.style.height = `${H}px`;
     };
-    const paint = () => paintPiece(pf, info.st.deco, { size: parseFloat(fig.style.width), src: info.src });
+    const paint = () => {
+        paintPiece(pf, info.st.deco, { size: parseFloat(fig.style.width), src: info.src });
+        if (info.sticker) { pf.src = info.src; paintSticker(pf, info.st); }
+    };
     img.addEventListener('load', () => { size(); paint(); });
     img.src = info.src;
     size();
@@ -936,10 +1109,11 @@ async function loadLayoutHere(id) {
     const key = activeKey();
     if (!key || !chatAvailable()) return;
     const chatKey = currentScene().chatKey;
-    if ((pinsOf(chatKey, key).length || frameOf(chatKey, key)) && !(await confirmBox(t('confirm_layout_load'), t('layout_load')))) return;
+    if ((pinsOf(chatKey, key).length || frameOf(chatKey, key) || stickersOf(chatKey).length) && !(await confirmBox(t('confirm_layout_load'), t('layout_load')))) return;
     const r = loadLayout(key, chatKey, id);
     applyAllSoon();
     if (r.pins) toast('success', t('layout_loaded', { n: r.pins }));
+    else if (r.stickers > 0) toast('success', t('layout_loaded_stickers', { n: r.stickers }));
     else if (r.frame) toast('success', t('layout_loaded_frame'));
     else toast('warning', t('layout_empty'));
     render();
@@ -1925,7 +2099,12 @@ function onClick(e) {
         }
         case 'room': state.roomFrom = 'wardrobe'; state.roomTab = 'outfits'; state.screen = 'room'; render(); break;
         case 'booth-go':
-            if (el.dataset.to === 'room') { state.roomFrom = 'booth'; state.roomTab = 'outfits'; }
+            // 0.10.0: the Stickers card opens "Decorate the chat" on its Stickers tab.
+            if (el.dataset.to === 'room' || el.dataset.to === 'stickers') {
+                state.roomFrom = 'booth';
+                state.roomTab = el.dataset.to === 'stickers' ? 'stickers' : 'outfits';
+                state.stickerEdit = false;
+            }
             state.screen = el.dataset.to === 'frame' ? 'frame' : 'room';
             render(); break;
         case 'stage-on-btn': case 'stage-off': {
@@ -1946,13 +2125,19 @@ function onClick(e) {
             save(); applyAllSoon(); render(); break;
         }
         case 'booth-who': state.tab = el.dataset.tab === 'persona' ? 'persona' : 'char'; render(); break;
-        case 'room-tab': state.roomTab = el.dataset.tab === 'stickers' ? 'stickers' : 'outfits'; render(); break;
+        case 'room-tab': state.roomTab = el.dataset.tab === 'stickers' ? 'stickers' : 'outfits'; state.stickerEdit = false; render(); break;
         case 'border': {
             const pid = el.dataset.pid || '';
             if (pid && !pid.includes('\n')) { entityFor(pid); stageOf(pid, true); }
             if (pid && pieceInfo(pid)) { state.borderPid = pid; state.screen = 'border'; }
             render(); break;
         }
+        case 'stk-look': if (LOOKS.includes(el.dataset.v)) { settings().stickerLook = el.dataset.v; save(); } render(); break;
+        case 'stk-add': stickHere(el.dataset.kind === 'mine' ? 'mine' : 'basic', el.dataset.ref); break;
+        case 'stk-remove': if (chatAvailable()) { removeSticker(currentScene().chatKey, el.dataset.id); applyAllSoon(); } render(); break;
+        case 'stk-edit': state.stickerEdit = !state.stickerEdit; render(); break;
+        case 'stk-del': deleteMySticker(el.dataset.id); break;
+        case 'stk-piece-look': if (LOOKS.includes(el.dataset.v)) setStickerLook({ look: el.dataset.v }); break;
         case 'deco': setDeco({ [el.dataset.k]: el.dataset.v }); break;
         case 'deco-color': setDeco({ color: el.dataset.v }); break;
         case 'deco-none': setDeco(null); break;
@@ -2120,6 +2305,9 @@ function onChange(e) {
         return;
     }
     if (act === 'deco-color' && el.type === 'color') { setDeco({ color: el.value }); return; }
+    if (act === 'stk-spark') { settings().stickerSpark = el.checked; save(); render(); return; }
+    if (act === 'stk-piece-spark') { setStickerLook({ spark: el.checked }); return; }
+    if (act === 'stk-upload') { const f = el.files; uploadStickers(f).finally(() => { el.value = ''; }); return; }
     if (act === 'deco-zoom') { save(); applyAllSoon(); return; }
     if (act === 'frame-color' && el.type === 'color') { setFrameHere({ color: cleanColor(el.value) }); return; }
     if (act === 'frame-blink') { setFrameHere({ blink: el.checked }); return; }

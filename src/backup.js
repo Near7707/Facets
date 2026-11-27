@@ -4,7 +4,7 @@ import { t } from './i18n.js';
 import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx, CHAT_TABLES as STORE_TABLES } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 
-const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'theme'];
+const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'theme', 'stickerLook', 'stickerSpark'];
 // Every table keyed by chat (the same list the store moves on renames), plus branch marks.
 const CHAT_TABLES = [...STORE_TABLES, 'branchDone'];
 
@@ -16,6 +16,7 @@ export async function exportBackup(toast) {
         exported: new Date().toISOString(),
         prefs: Object.fromEntries(PREF_KEYS.map(k => [k, s[k]])),
         entities: structuredClone(s.entities),
+        myStickers: structuredClone(s.myStickers || []), // 0.10.0
         ...Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(s[k] || {})])),
         images: null,
     };
@@ -30,6 +31,10 @@ export async function exportBackup(toast) {
                     try { out.images[p] = await fetchAsDataURL(p); } catch { failed++; }
                 }
             }
+        }
+        for (const m of s.myStickers || []) {
+            if (!m.path || out.images[m.path]) continue;
+            try { out.images[m.path] = await fetchAsDataURL(m.path); } catch { failed++; }
         }
         if (failed) toast?.('warning', t('backup_img_failed', { n: failed }));
     }
@@ -62,6 +67,8 @@ export async function importBackup(file, toast) {
     const s = settings();
     const entities = structuredClone(data.entities);
     const tables = Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(data[k] || {})]));
+    // 0.10.0: your own stickers. Older backups have none; then the ones you have stay.
+    const myStickers = Array.isArray(data.myStickers) ? structuredClone(data.myStickers) : null;
     if (data.images && typeof data.images === 'object') {
         const moved = new Map();
         let failed = 0;
@@ -81,14 +88,27 @@ export async function importBackup(file, toast) {
                 }
             }
         }
+        for (const m of myStickers || []) {
+            const p = m?.path;
+            const img = p && data.images[p];
+            if (!img) continue;
+            if (moved.has(p)) { m.path = moved.get(p); continue; }
+            try {
+                const stem = String(p).split('/').pop().replace(/\.[^.]+$/, '');
+                const np = await uploadDataURL(img, 'Facets_stickers', stem);
+                moved.set(p, np);
+                m.path = np;
+            } catch { failed++; }
+        }
         if (failed) toast?.('warning', t('backup_img_failed', { n: failed }));
     }
     const files = s.files; // keep the full list so cleanup can still find older uploads
     s.entities = entities;
     for (const k of CHAT_TABLES) s[k] = tables[k];
+    if (myStickers) s.myStickers = myStickers;
     for (const k of PREF_KEYS) {
         const v = data.prefs?.[k];
-        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || ((k === 'ignoreWords' || k === 'theme') && typeof v === 'string')) s[k] = v;
+        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (['ignoreWords', 'theme', 'stickerLook'].includes(k) && typeof v === 'string')) s[k] = v;
     }
     // 0.9.0-0.9.1 backups have followTheme instead of theme.
     if (typeof data.prefs?.theme !== 'string' && typeof data.prefs?.followTheme === 'boolean') s.theme = data.prefs.followTheme ? 'st' : 'holo';

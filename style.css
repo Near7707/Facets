@@ -1989,3 +1989,53 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-sheet .facets-btile-cap { justify-content: center; width: 100%; text-align: center; }
 /* A note under its field name, not beside it. */
 .facets-flabel-stack small { display: block; margin: 3px 0 0; }
+
+/* ================= 0.10.0 stickers =================
+   Stickers in the chat (same pieces as the outfit pictures), and the Stickers tab of "Decorate the chat". */
+
+.facets-fig.is-sticker > img { object-fit: contain; }
+.facets-fig.is-sticker.is-flip > .facets-fig-gloss { transform: scaleX(-1); }
+/* Your own pictures: a soft gloss cut to the picture's own shape, and twinkling stars on top. */
+.facets-fig-gloss { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 42% 20% at 30% 18%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 70%); }
+.facets-fig-gloss.is-jelly { background: radial-gradient(ellipse 48% 26% at 30% 20%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 72%),
+    radial-gradient(circle at 70% 85%, rgba(120, 50, 140, 0.12), rgba(120, 50, 140, 0) 60%); }
+.facets-fig-glint { position: absolute; inset: -9%; pointer-events: none; background: center / 100% 100% no-repeat; }
+.facets-fig-gloss[hidden], .facets-fig-glint[hidden] { display: none; }
+
+/* ON THIS CHAT */
+.facets-stk-card .facets-closet-head { margin-bottom: 9px; }
+.facets-stk-onrow { display: flex; flex-wrap: wrap; gap: 12px 12px; padding: 4px 2px 8px; }
+.facets-stk-on { position: relative; width: 58px; height: 58px; flex: 0 0 auto; }
+.facets-stk-onpic { width: 58px; height: 58px; padding: 2px; border-radius: 14px; display: grid; place-items: center; cursor: pointer; box-sizing: border-box;
+    background: var(--ft-tile, var(--facets-surface)); border: 1px solid var(--ft-tile-b, var(--facets-border)); color: inherit; }
+.facets-stk-onpic img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
+.facets-stk-x { position: absolute; top: -7px; right: -7px; width: 24px; height: 24px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    background: var(--facets-surface); color: var(--facets-danger, #c2386a); border: 1px solid var(--facets-border); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); font-size: 11px; }
+
+/* BASIC / MY STICKERS */
+.facets-stk-hint { flex: 0 1 auto; min-width: 0; font-size: 11px; color: var(--facets-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-stk-lookrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.facets-stk-lookrow .facets-seg { flex: 1 1 auto; min-width: 0; }
+.facets-stk-lookrow .facets-segbtn { min-width: 0; }
+.facets-stk-spark.facets-toggle { flex: 0 0 auto; gap: 8px; padding: 0; min-height: 32px; border: 0; background: none; }
+.facets-stk-spark .facets-toggle-text { white-space: nowrap; }
+.facets-stk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+@media (min-width: 601px) { .facets-stk-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.facets-stk-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 72px;
+    padding: 8px 4px 6px; border-radius: 14px; cursor: pointer; box-sizing: border-box; color: var(--facets-muted); font: inherit;
+    background: var(--ft-tile, var(--facets-surface)); border: 1px solid var(--ft-tile-b, var(--facets-border));
+    -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+.facets-stk-tile img { width: 52px; height: 52px; margin: -4px 0 -2px; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
+.facets-stk-tile > span:not(.facets-add-plus) { max-width: 100%; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facets-stk-tile:disabled { opacity: 0.45; cursor: default; }
+.facets-stk-tile.is-mine img { filter: drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff) drop-shadow(0 1px 2px rgba(40, 20, 60, 0.3)); }
+.facets-stk-tile.is-edit { border-color: var(--facets-danger, #c2386a); }
+.facets-stk-del { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 10px;
+    background: var(--facets-danger, #c2386a); color: #fff; }
+.facets-stk-up { border-style: dashed; border-width: 1.5px; background: transparent; color: var(--facets-accent); }
+.facets-stk-up .facets-add-plus { width: 30px; height: 30px; }
+.facets-stk-card .facets-closet-head .facets-btn.facets-small { flex: 0 0 auto; }
+.facets-sheet.facets-t-clean .facets-stk-tile, .facets-sheet.facets-t-clean .facets-stk-onpic { background: var(--facets-surface2, var(--facets-surface)); border-color: var(--ft-edge, var(--facets-border)); border-radius: 13px; }
+.facets-sheet.facets-t-diary .facets-stk-tile, .facets-sheet.facets-t-diary .facets-stk-onpic { border-radius: 4px; }
+.facets-sheet.facets-t-diary .facets-stk-up { background: transparent; border-color: #e3b6d0; }

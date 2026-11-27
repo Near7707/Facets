@@ -11,8 +11,9 @@
 import { t } from './i18n.js';
 import {
     settings, save, stageOf, effectiveOutfit, isCharKey, avatarOfKey, SIZE_MIN, SIZE_MAX, OPACITY_MIN,
-    pinsOf, getEntity, removePin, normRot,
+    pinsOf, getEntity, removePin, normRot, stickersOf, findSticker, removeSticker, STICKER_KEY,
 } from './store.js';
+import { basicUrl, lookFilter, sparkOverlayUrl } from './stickers.js';
 import { urlOf } from './images.js';
 import { currentScene, onApply } from './apply.js';
 import { syncTheme } from './theme.js';
@@ -20,7 +21,8 @@ import { paintPiece, isCutShape } from './deco.js';
 
 let layer = null;
 const figures = new Map(); // piece id -> { fig, img, dot, handle, src, ar, broken, visible, center }
-// Piece id: the entity key for the "current outfit" picture, "<entity key>\n<pin id>" for a pinned one.
+// Piece id: the entity key for the "current outfit" picture, "<entity key>\n<pin id>" for a pinned one,
+// "*\n<sticker id>" for a sticker (0.10.0).
 let shown = [];
 let toolsKey = ''; // whose tool bar is open
 let gesture = null;
@@ -44,9 +46,12 @@ function splitPid(pid) {
     return i < 0 ? { ek: String(pid), pinId: '' } : { ek: pid.slice(0, i), pinId: pid.slice(i + 1) };
 }
 
-/** Settings of one piece: the entity's stage, or the pin in the open chat. */
+const isSticker = (pid) => splitPid(pid).ek === STICKER_KEY;
+
+/** Settings of one piece: the entity's stage, the pin or the sticker in the open chat. */
 function stOf(pid) {
     const { ek, pinId } = splitPid(pid);
+    if (ek === STICKER_KEY) return pinId ? findSticker(currentScene().chatKey, pinId) : null;
     if (!pinId) return stageOf(ek);
     const chatKey = currentScene().chatKey;
     return chatKey ? pinsOf(chatKey, ek).find(p => p.id === pinId) || null : null;
@@ -54,6 +59,7 @@ function stOf(pid) {
 
 function outfitOf(pid) {
     const { ek, pinId } = splitPid(pid);
+    if (ek === STICKER_KEY) return null;
     const chatKey = currentScene().chatKey;
     if (!pinId) return effectiveOutfit(ek, chatKey);
     const pin = stOf(pid);
@@ -61,9 +67,17 @@ function outfitOf(pid) {
 }
 
 const PIN_X = [0.5, 0.35, 0.65, 0.2, 0.8, 0.5];
+// Stickers start around the middle of the chat, a little apart and a little tilted.
+const STICKER_SPOT = [[0.5, 0.42, -6], [0.63, 0.35, 8], [0.37, 0.52, 4], [0.66, 0.54, -10], [0.34, 0.33, 10], [0.5, 0.62, -4],
+    [0.5, 0.24, 6], [0.24, 0.44, -8], [0.76, 0.44, 5], [0.27, 0.62, 9], [0.73, 0.65, -5], [0.5, 0.78, 3]];
 
 function defaultPlace(pid) {
     const { ek, pinId } = splitPid(pid);
+    if (ek === STICKER_KEY) {
+        const i = Math.max(0, stickersOf(currentScene().chatKey).findIndex(k => k.id === pinId));
+        const [x, y, rot] = STICKER_SPOT[i % STICKER_SPOT.length];
+        return { v: 2, x, y, size: screenKind() === 'narrow' ? 0.16 : 0.14, rot };
+    }
     let size = screenKind() === 'narrow' ? 0.4 : 0.5;
     let x = isCharKey(ek) ? 0.8 : 0.2; // character right, persona left: they never start on top of each other
     if (pinId) {
@@ -147,13 +161,30 @@ function pictureUrl(key, outfit) {
     return isCharKey(key) ? `/characters/${avatar}` : `/User%20Avatars/${avatar}`;
 }
 
+/** Picture of a sticker ('' when your own sticker picture was deleted). */
+export function stickerSrc(k, blink = true) {
+    if (!k) return '';
+    if (k.kind === 'basic') return basicUrl(k.ref, k.look, k.spark, blink);
+    const m = settings().myStickers.find(x => x.id === k.ref);
+    return m ? urlOf(m.path) : '';
+}
+
+/** Full picture of any piece ('' if it is gone). */
+function srcOf(pid) {
+    if (isSticker(pid)) return stickerSrc(stOf(pid));
+    const { ek, pinId } = splitPid(pid);
+    const outfit = outfitOf(pid);
+    if (pinId && !outfit) return '';
+    return pictureUrl(ek, outfit);
+}
+
 /** For the Photo Booth: the settings, outfit and full picture of one piece (null if it isn't there). */
 export function pieceInfo(pid) {
     const st = stOf(pid);
     if (!st) return null;
-    const outfit = outfitOf(pid);
-    if (splitPid(pid).pinId && !outfit) return null;
-    return { st, outfit, src: pictureUrl(splitPid(pid).ek, outfit) };
+    const src = srcOf(pid);
+    if (!src) return null;
+    return { st, outfit: outfitOf(pid), src, sticker: isSticker(pid) };
 }
 
 /** Redraw one piece after its border changed. */
@@ -271,6 +302,7 @@ function shownKeys() {
         if (stageOf(ek)?.on) out.push(ek);
         for (const pin of pinsOf(sc.chatKey, ek)) out.push(`${ek}\n${pin.id}`);
     }
+    for (const k of stickersOf(sc.chatKey)) out.push(`${STICKER_KEY}\n${k.id}`);
     return out;
 }
 
@@ -413,16 +445,17 @@ function drawOne(key) {
     if (!layer || !shown.includes(key)) return;
     const st = stOf(key);
     if (!st) return;
-    const { ek, pinId } = splitPid(key);
+    const { ek } = splitPid(key);
+    const sticker = ek === STICKER_KEY;
     const outfit = outfitOf(key);
-    if (pinId && !outfit) return; // the outfit was deleted
+    const src = srcOf(key);
+    if (!src) return; // the outfit (or your own sticker picture) was deleted
     const f = entryFor(key);
-    const src = pictureUrl(ek, outfit);
     if (f.src !== src) {
         f.src = src;
         f.ar = 0;
         f.img.src = src;
-        f.handle.querySelector('img').src = thumbUrl(ek, outfit);
+        f.handle.querySelector('img').src = sticker ? (st.kind === 'basic' ? stickerSrc(st, false) : src) : thumbUrl(ek, outfit);
     }
     const W = geo?.W || layer.clientWidth, H = geo?.H || layer.clientHeight;
     const ready = upgradePlace(key, st);
@@ -430,6 +463,7 @@ function drawOne(key) {
     const showFig = ready && !st.hidden && !f.broken && W > 0 && H > 0;
     f.fig.hidden = !showFig;
     paintPiece(f, st.deco, { size: b.w, ar: f.ar, src: f.src }); // 0.8.0: border (0.8.1: size for even cut-shape borders)
+    if (sticker) paintSticker(f, st);
     f.fig.classList.toggle('is-locked', st.locked);
     f.fig.classList.toggle('is-flip', st.flip);
     f.fig.classList.toggle('is-active', gesture?.key === key);
@@ -457,6 +491,42 @@ function drawOne(key) {
     const hb = holes[0];
     f.handle.style.top = `${clamp(b.cy - 22, 4, Math.max(4, (hb ? hb.t : H) - 48))}px`;
     if (toolsKey === key) placeTools();
+}
+
+/**
+ * 0.10.0: the sticker look. Basic stickers have it drawn into their picture; this adds the shadow,
+ * and for your own pictures a white edge, a soft gloss and twinkling stars on top.
+ * A border chosen in the border screen comes first (no extra edge then).
+ */
+export function paintSticker(f, k) {
+    const mine = k.kind === 'mine';
+    const plain = !k.deco;
+    f.fig.classList.add('is-sticker');
+    if (k.deco?.shape !== 'outline') f.img.style.filter = plain ? lookFilter(k.look, mine) : '';
+    const gloss = mine && plain && k.look !== 'cut';
+    if (gloss && !f.gloss) {
+        f.gloss = document.createElement('div');
+        f.gloss.className = 'facets-fig-gloss';
+        f.fig.appendChild(f.gloss);
+    }
+    if (f.gloss) {
+        f.gloss.hidden = !gloss;
+        const m = gloss ? `url("${f.src.replace(/["\\]/g, '\\$&')}") center / 100% 100% no-repeat` : '';
+        if (f.gloss.dataset.src !== m) {
+            f.gloss.dataset.src = m;
+            f.gloss.style.webkitMask = m;
+            f.gloss.style.mask = m;
+        }
+        f.gloss.classList.toggle('is-jelly', k.look === 'jelly');
+    }
+    const glint = mine && k.spark;
+    if (glint && !f.glint) {
+        f.glint = document.createElement('div');
+        f.glint.className = 'facets-fig-glint';
+        f.glint.style.backgroundImage = `url("${sparkOverlayUrl(true)}")`;
+        f.fig.appendChild(f.glint);
+    }
+    if (f.glint) f.glint.hidden = !glint;
 }
 
 // ---------- tool bar ----------
@@ -501,7 +571,7 @@ function openTools(key) {
            <div class="facets-stage-row2">
              ${ico('rot-left', 'fa-rotate-left', t('stage_rot_left'))}${ico('rot-right', 'fa-rotate-right', t('stage_rot_right'))}
              <span class="facets-stage-sep" aria-hidden="true"></span>
-             ${ico('lock', 'fa-lock', t('stage_lock'))}${ico('hide', 'fa-arrow-right-to-bracket', t('stage_hide'))}${ico('remove', 'fa-trash-can', `${t('stage_remove')} · ${t(splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main')}`)}
+             ${ico('lock', 'fa-lock', t('stage_lock'))}${ico('hide', 'fa-arrow-right-to-bracket', t('stage_hide'))}${ico('remove', 'fa-trash-can', `${t('stage_remove')} · ${t(isSticker(key) ? 'stage_remove_sticker' : splitPid(key).pinId ? 'stage_remove_pin' : 'stage_remove_main')}`)}
            </div>`;
     layer.appendChild(bar);
     if (!st.locked) {
@@ -764,7 +834,8 @@ function onClick(e) {
         case 'remove': {
             const { ek, pinId } = splitPid(key);
             closeTools();
-            if (pinId) removePin(currentScene().chatKey, ek, pinId, true);
+            if (ek === STICKER_KEY) removeSticker(currentScene().chatKey, pinId);
+            else if (pinId) removePin(currentScene().chatKey, ek, pinId, true);
             else { st.on = false; save(); }
             applyStage();
             document.dispatchEvent(new CustomEvent('facets:stage'));
