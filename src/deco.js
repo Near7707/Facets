@@ -244,14 +244,15 @@ const beat = (blink, cls, d, l) => blink ? ` class="${cls}" style="--d:${d}s;--l
 const spark = (x, y, r) => `M${x} ${y - r}C${x + r * 0.18} ${y - r * 0.18} ${x + r * 0.18} ${y - r * 0.18} ${x + r} ${y}C${x + r * 0.18} ${y + r * 0.18} ${x + r * 0.18} ${y + r * 0.18} ${x} ${y + r}C${x - r * 0.18} ${y + r * 0.18} ${x - r * 0.18} ${y + r * 0.18} ${x - r} ${y}C${x - r * 0.18} ${y - r * 0.18} ${x - r * 0.18} ${y - r * 0.18} ${x} ${y - r}Z`;
 const STARS = (c, blink) => svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 40">${blink ? TWINKLE : ''}<g fill="${c}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><path${beat(blink, 't', 2.6, 0)} d="${starPath(44, 16, 14, 6.5)}"/><path${beat(blink, 't', 2.2, -0.9)} d="${starPath(24, 10, 8, 3.7)}"/><path${beat(blink, 't', 3, -1.7)} d="${starPath(54, 34, 6, 2.8)}"/></g></svg>`);
 // Glitter dust: small dots around the picture and two sparkles (big top right, small bottom left).
-const GLITTER_DOTS = [[200, 46, 2.4, 1.6, 0], [245, 47, 2, 2.1, -0.5], [290, 46, 2.3, 1.8, -1], [338, 47, 2, 2.4, -0.2], [22, 46, 2.4, 1.7, -0.8], [68, 47, 2, 2.2, -1.3], [112, 46, 2.3, 1.9, -0.6], [158, 47, 2, 2.5, -1.5]];
+// 0.9.5: about 55% of the 0.9.4 size (finer dust).
+const GLITTER_DOTS = [[200, 46, 1.3, 1.6, 0], [245, 47, 1.1, 2.1, -0.5], [290, 46, 1.25, 1.8, -1], [338, 47, 1.1, 2.4, -0.2], [22, 46, 1.3, 1.7, -0.8], [68, 47, 1.1, 2.2, -1.3], [112, 46, 1.25, 1.9, -0.6], [158, 47, 1.1, 2.5, -1.5]];
 const SPARKLES = (c, blink) => {
     const dots = GLITTER_DOTS.map(([deg, r, size, d, l]) => {
         const a = (deg - 90) * Math.PI / 180;
         const cx = (50 + r * Math.cos(a)).toFixed(1), cy = (50 + r * Math.sin(a)).toFixed(1);
         return `<circle${beat(blink, 'g', d, l)} cx="${cx}" cy="${cy}" r="${size}"/>`;
     }).join('');
-    return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${blink ? TWINKLE : ''}<g fill="${c}" stroke="#fff" stroke-width="0.8">${dots}<path${beat(blink, 't', 2.6, 0)} d="${spark(86, 12, 9)}"/><path${beat(blink, 't', 3, -1.2)} d="${spark(13, 85, 6)}"/></g></svg>`);
+    return svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${blink ? TWINKLE : ''}<g fill="${c}" stroke="#fff" stroke-width="0.45">${dots}<path${beat(blink, 't', 2.6, 0)} d="${spark(84, 14, 5)}"/><path${beat(blink, 't', 3, -1.2)} d="${spark(14, 84, 3.3)}"/></g></svg>`);
 };
 
 /** Ring radius just outside an avatar with the given radius ("50%" or "10px"). */
@@ -305,7 +306,7 @@ export function frameCss(sel, imgSel, fr, radius, box) {
             css += ring(`repeating-conic-gradient(${c} 0 15deg, ${second(c)} 15deg 30deg)`, 4);
             break;
         case 'star':
-            css += ring(c) + deco(STARS(c, f.blink), at(x + w - 20, y - 12, 32, 22), f.blink && STARS(c, false));
+            css += ring(c) + deco(STARS(c, f.blink), at(x + w - 13, y - 7, 18, 12), f.blink && STARS(c, false)); // 0.9.5: about 55% of the old size
             break;
         case 'holo':
             css += ring(`${HOLO} 0 0/200% 200%`, 4, 'animation:facets-holo 6s linear infinite;') + deco(SPARKLES('#ffffff', f.blink), at(x - 9, y - 9, w + 18, h + 18), f.blink && SPARKLES('#ffffff', false));
