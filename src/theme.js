@@ -93,12 +93,15 @@ export function computeTheme() {
     };
 }
 
+/** Returns true when the SillyTavern theme is dark (Facets' own look picks its dark version then). */
 export function syncTheme(el) {
     try {
         const vars = computeTheme();
         for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
         el.style.colorScheme = vars['--facets-scheme'];
+        return vars['--facets-scheme'] === 'dark';
     } catch (e) {
         console.warn('[Facets] theme', e);
+        return true;
     }
 }

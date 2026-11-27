@@ -55,20 +55,18 @@
 }
 
 @media (max-width: 600px) {
+    /* 0.9.0: on a phone the window fills the screen (a strip of chat above looked cut off). */
     .facets-sheet {
         left: 0;
-        top: auto;
-        bottom: 0;
+        top: 0;
         transform: none;
         width: 100%;
-        /* Fixed height on every screen; a strip of the chat stays visible above. */
-        height: calc(100% - max(56px, 12%));
-        border-radius: 18px 18px 0 0;
-        border-bottom: none;
+        height: 100%;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
     }
-    .facets-root.facets-kb .facets-sheet {
-        height: calc(100% - 8px);
-    }
+    .facets-head { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
 }
 
 .facets-busy { cursor: progress; }
@@ -1048,10 +1046,9 @@ html.facets-open body { overscroll-behavior: none; }
 
 .facets-card {
     padding: 12px;
-    border: 2px solid #fff;
-    border-radius: 20px;
-    background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55));
-    box-shadow: 0 6px 18px rgba(120, 70, 170, 0.14);
+    border: 1px solid var(--facets-border);
+    border-radius: 14px;
+    background: var(--facets-surface);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1376,3 +1373,247 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-fchip-name { max-width: 100%; font-size: 11.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .facets-booth .facets-pin-row .facets-iconbtn { width: 32px; height: 32px; font-size: 15px; }
 .facets-booth .facets-pin-row .facets-hist-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ================= 0.9.0 Facets look =================
+   .facets-ft on the window: Facets' own look, light or dark like the SillyTavern theme.
+   Without it (the "Follow SillyTavern theme" switch) the wardrobe keeps the SillyTavern colours above. */
+.facets-sheet.facets-ft {
+    --ft-holo: linear-gradient(135deg, #ffb3e1, #d4bfff 35%, #a8e4ff 65%, #ffe9a8);
+    color: var(--facets-text);
+    background: var(--ft-bgimg);
+}
+.facets-sheet.facets-ft.is-light {
+    color-scheme: light;
+    --facets-bg: #f6f0ff;
+    --facets-text: #3d2352;
+    --facets-muted: #6f5785;
+    --facets-surface: rgba(255, 255, 255, 0.8);
+    --facets-surface2: #ffffff;
+    --facets-border: #e4d5f2;
+    --facets-accent: #d9477a;
+    --facets-on-accent: #ffffff;
+    --facets-danger: #c42a62;
+    --facets-danger-bg: #c42a62;
+    --ft-bgimg: radial-gradient(circle, rgba(255, 255, 255, 0.75) 1.2px, transparent 1.8px) 0 0 / 40px 40px, linear-gradient(170deg, #f8f2ff, #f2edff 40%, #fdf0f7);
+    --ft-card-b: 1.5px solid #ffffff;
+    --ft-card-sh: 0 4px 18px rgba(140, 90, 200, 0.12);
+    --ft-seg: #efe5fa;
+    --ft-segon: #ffffff;
+    --ft-segsh: 0 1px 4px rgba(120, 60, 160, 0.15);
+    --ft-inner: #ffffff;
+    --ft-field: #ffffff;
+    --ft-icon: #8a5fb5;
+    --ft-switch: #d9477a;
+    --ft-swoff: #e3d6f0;
+    --ft-foot: rgba(255, 255, 255, 0.6);
+    --ft-ging: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.55) 0 5px, transparent 5px 10px), repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.55) 0 5px, transparent 5px 10px), #ffd3ea;
+    --ft-ging-line: #f2a3cf;
+    --ft-ging-text: #ab2b5d;
+    --ft-danger-line: #f3b6cb;
+    --ft-edge: #ffffff;
+}
+.facets-sheet.facets-ft.is-dark {
+    color-scheme: dark;
+    --facets-bg: #211830;
+    --facets-text: #f4eaff;
+    --facets-muted: #bba8cf;
+    --facets-surface: rgba(255, 255, 255, 0.06);
+    --facets-surface2: rgba(255, 255, 255, 0.07);
+    --facets-border: rgba(255, 255, 255, 0.13);
+    --facets-accent: #ffa3c8;
+    --facets-on-accent: #2a1020;
+    --facets-danger: #ff8fab;
+    --facets-danger-bg: #b8325a;
+    --ft-bgimg: radial-gradient(circle, rgba(255, 255, 255, 0.07) 1px, transparent 1.6px) 0 0 / 40px 40px, linear-gradient(170deg, #1c1527, #261a36 55%, #1c1527);
+    --ft-card-b: 1px solid rgba(255, 255, 255, 0.1);
+    --ft-card-sh: none;
+    --ft-seg: rgba(255, 255, 255, 0.07);
+    --ft-segon: rgba(255, 255, 255, 0.15);
+    --ft-segsh: none;
+    --ft-inner: #2d2240;
+    --ft-field: #2a2038;
+    --ft-icon: #d9b8ff;
+    --ft-switch: #e0679c;
+    --ft-swoff: rgba(255, 255, 255, 0.18);
+    --ft-foot: rgba(0, 0, 0, 0.18);
+    --ft-ging: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.07) 0 5px, transparent 5px 10px), repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 5px, transparent 5px 10px), #46284c;
+    --ft-ging-line: rgba(255, 159, 216, 0.55);
+    --ft-ging-text: #ffc4dc;
+    --ft-danger-line: rgba(255, 143, 171, 0.5);
+    --ft-edge: rgba(255, 255, 255, 0.14);
+}
+@media (min-width: 601px) { .facets-sheet.facets-ft { border: 1.5px solid var(--ft-edge); } }
+
+/* header */
+.facets-ft .facets-head { border-bottom: 0; background: transparent; margin-bottom: 0; padding-left: 14px; }
+.facets-ft .facets-head::after { display: none; }
+.facets-ft .facets-title { font-size: 20px; font-weight: 900; letter-spacing: -0.3px; }
+.facets-ft .facets-foot { background: var(--ft-foot); border-top: 1px solid var(--facets-border); }
+.facets-ft .facets-stack { gap: 10px; }
+
+/* icon buttons: small rounded squares with line icons */
+.facets-sheet.facets-ft .facets-iconbtn {
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--facets-border);
+    border-radius: 12px;
+    background: var(--facets-surface2);
+    color: var(--ft-icon);
+    font-size: 15px;
+}
+.facets-sheet.facets-ft .facets-iconbtn:hover { background: var(--facets-surface2); filter: brightness(1.04); }
+.facets-sheet.facets-ft .facets-iconbtn.facets-danger-icon { color: var(--facets-danger); }
+.facets-sheet.facets-ft .facets-pin-opt { opacity: 1; }
+.facets-sheet.facets-ft .facets-pin-opt.on,
+.facets-sheet.facets-ft .facets-chip.on,
+.facets-sheet.facets-ft .facets-patchip.on,
+.facets-sheet.facets-ft .facets-fchip.on {
+    border: 2px solid transparent;
+    background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
+    color: var(--facets-accent);
+    font-weight: 800;
+    box-shadow: none;
+}
+
+/* buttons */
+.facets-sheet.facets-ft .facets-btn {
+    border: 1px solid var(--facets-border);
+    border-radius: 14px;
+    background: var(--facets-surface2);
+    color: var(--facets-text);
+    font-weight: 700;
+    box-shadow: none;
+}
+.facets-sheet.facets-ft .facets-btn:hover { background: var(--facets-surface2); filter: brightness(1.03); }
+/* the important buttons: gingham check */
+.facets-sheet.facets-ft .facets-btn.facets-primary,
+.facets-sheet.facets-ft .facets-btn.facets-jellybtn {
+    border: 1.5px solid var(--ft-ging-line);
+    background: var(--ft-ging);
+    color: var(--ft-ging-text);
+    font-weight: 800;
+    box-shadow: none;
+}
+.facets-sheet.facets-ft .facets-btn.facets-danger { border: 1.5px solid var(--ft-danger-line); background: transparent; color: var(--facets-danger); }
+.facets-sheet.facets-ft .facets-btn.facets-danger-solid { border-color: var(--facets-danger-bg); background: var(--facets-danger-bg); color: #fff; }
+.facets-row-split > .facets-danger { flex: 0 0 auto; }
+.facets-foot .facets-row-split > .facets-danger { padding: 0 14px; }
+
+/* wardrobe doors: holo border, the inside is the card colour */
+.facets-sheet.facets-ft .facets-boothrow .facets-btn {
+    height: 46px;
+    border: 2.5px solid transparent;
+    background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
+    color: var(--facets-text);
+    box-shadow: none;
+}
+
+/* segmented pickers, the head tabs and the room tabs */
+.facets-sheet.facets-ft .facets-seg,
+.facets-sheet.facets-ft .facets-roomtabs {
+    gap: 2px;
+    padding: 3px;
+    border: 0;
+    border-radius: 13px;
+    background: var(--ft-seg);
+}
+.facets-sheet.facets-ft .facets-segbtn,
+.facets-sheet.facets-ft .facets-roomtab {
+    height: 32px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--facets-muted);
+    box-shadow: none;
+}
+.facets-sheet.facets-ft .facets-segbtn.on,
+.facets-sheet.facets-ft .facets-roomtab.on {
+    background: var(--ft-segon);
+    color: var(--facets-accent);
+    font-weight: 800;
+    box-shadow: var(--ft-segsh);
+}
+.facets-sheet.facets-ft .facets-roomtab em { background: var(--facets-surface2); border: 1px dashed var(--facets-border); color: var(--facets-muted); }
+
+/* chips (drawers, border shapes and patterns, frames) */
+.facets-sheet.facets-ft .facets-chip,
+.facets-sheet.facets-ft .facets-patchip,
+.facets-sheet.facets-ft .facets-fchip {
+    border: 1px solid var(--facets-border);
+    background: var(--facets-surface2);
+    color: var(--facets-text);
+    box-shadow: none;
+}
+.facets-sheet.facets-ft .facets-chip { height: 36px; border-radius: 999px; }
+.facets-sheet.facets-ft .facets-chip:hover { background: var(--facets-surface2); filter: brightness(1.03); }
+.facets-sheet.facets-ft .facets-patchip { border-radius: 12px; }
+.facets-sheet.facets-ft .facets-fchip { border-radius: 14px; }
+
+/* outfit tiles: the worn one gets a holo ring */
+.facets-ft .facets-thumb { border-radius: 14px; }
+.facets-sheet.facets-ft .facets-tile.on .facets-thumb {
+    border: 3px solid transparent;
+    background: linear-gradient(var(--ft-inner), var(--ft-inner)) padding-box, var(--ft-holo) border-box;
+}
+.facets-ft .facets-tile.on .facets-label { color: var(--facets-accent); font-weight: 800; }
+.facets-ft .facets-check { background: var(--facets-accent); color: var(--facets-on-accent); }
+
+/* cards */
+.facets-sheet.facets-ft .facets-card,
+.facets-sheet.facets-ft .facets-section,
+.facets-sheet.facets-ft .facets-aibar,
+.facets-sheet.facets-ft .facets-pair,
+.facets-sheet.facets-ft .facets-stage-state,
+.facets-sheet.facets-ft .facets-leftbar {
+    border: var(--ft-card-b);
+    border-radius: 18px;
+    background: var(--facets-surface);
+    box-shadow: var(--ft-card-sh);
+}
+.facets-sheet.facets-ft .facets-card { border-radius: 20px; padding: 14px; gap: 10px; }
+.facets-sheet.facets-ft .facets-hist-row { border: var(--ft-card-b); border-radius: 16px; background: var(--facets-surface); box-shadow: none; }
+.facets-sheet.facets-ft .facets-pin-row.is-pinned { border-color: var(--ft-ging-line); }
+.facets-sheet.facets-ft .facets-section.facets-danger-zone { border-color: var(--facets-danger); }
+.facets-ft .facets-stitle { color: var(--facets-text); font-weight: 800; }
+.facets-ft .facets-card-title { color: var(--facets-text); }
+.facets-ft .facets-aistate { border-top-color: var(--facets-border); }
+.facets-ft .facets-aistate.is-on .facets-aistate-dot { background: #5fd3a0; }
+
+/* switches */
+.facets-sheet.facets-ft .facets-switch { border: 0; background: var(--ft-swoff); }
+.facets-sheet.facets-ft .facets-switch::after { top: 4px; left: 4px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+.facets-sheet.facets-ft .facets-toggle input:checked + .facets-switch { background: var(--ft-switch); }
+.facets-sheet.facets-ft .facets-toggle input:checked + .facets-switch::after { background: #fff; }
+
+/* fields */
+.facets-sheet.facets-ft .facets-input {
+    border-radius: 12px;
+    background: var(--ft-field);
+    box-shadow: inset 0 0 0 1000px var(--ft-field);
+}
+.facets-sheet.facets-ft select.facets-select { border-radius: 12px; background-color: var(--ft-field); }
+.facets-ft .facets-range { accent-color: var(--facets-accent); }
+
+/* colour dots */
+.facets-sheet.facets-ft .facets-swatch { border-color: var(--ft-inner); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--facets-border); }
+.facets-sheet.facets-ft .facets-swatch.on { box-shadow: 0 0 0 2.5px var(--facets-accent); }
+
+/* room: the current-outfit card */
+.facets-ft .facets-card-thumb { border-color: var(--ft-inner); background: var(--ft-inner); }
+.facets-btnrow-gap { flex: 1 1 auto; }
+.facets-sheet.facets-ft .facets-btnrow .facets-turnrow { gap: 0; padding: 0; border: 1px solid var(--facets-border); border-radius: 12px; background: var(--facets-surface2); }
+.facets-sheet.facets-ft .facets-btnrow .facets-turnrow .facets-iconbtn { width: 34px; height: 36px; border: 0; background: transparent; }
+.facets-ft .facets-btnrow .facets-turndeg { min-width: 30px; color: var(--facets-muted); font-weight: 800; }
+.facets-sheet.facets-ft .facets-btnrow > .facets-iconbtn { width: 38px; }
+
+/* border and frame previews */
+.facets-sheet.facets-ft .facets-bprev, .facets-sheet.facets-ft .facets-fstage { border: var(--ft-card-b); }
+.facets-movecard { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px dashed var(--facets-border); }
+
+/* wardrobe: what is worn + what the AI is told, in one card */
+.facets-nowcard { margin: 0 0 12px; gap: 6px; }
+.facets-nowcard .facets-statusrow { margin: 0; }
+.facets-nowcard-ai { border-top: 1px solid var(--facets-border); padding-top: 4px; }
+.facets-nowcard-ai .facets-toggle { min-height: 38px; }
+.facets-ft .facets-status { color: var(--facets-text); }
+@media (max-width: 600px) { .facets-sheet.facets-ft { border: none; } }

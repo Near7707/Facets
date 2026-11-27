@@ -16,7 +16,7 @@ import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender
 import { onReply } from './src/auto.js';
 import { initStage } from './src/stage.js';
 
-export const VERSION = '0.8.1';
+export const VERSION = '0.9.0';
 setVersion(VERSION);
 
 function langOptions() {
@@ -39,6 +39,10 @@ function settingsPanelHtml() {
             <span>${t('language')}</span>
             <select class="text_pole facets-panel-select" data-facets-lang>${langOptions()}</select>
           </label>
+          <label class="checkbox_label facets-panel-theme">
+            <input type="checkbox" data-facets-theme${settings().followTheme ? ' checked' : ''}>
+            <span>${t('follow_theme')}</span>
+          </label>
           <div class="facets-panel-version">${t('version', { v: VERSION })}</div>
         </div>
       </div>`;
@@ -58,6 +62,13 @@ function mountSettingsPanel() {
             if (e.target.closest('[data-facets-open]')) openWardrobe({ fromSettings: true });
         });
         panel.addEventListener('change', (e) => {
+            const box = e.target.closest('[data-facets-theme]');
+            if (box) {
+                settings().followTheme = box.checked;
+                save();
+                rerender();
+                return;
+            }
             const sel = e.target.closest('[data-facets-lang]');
             if (!sel) return;
             chooseLang(sel.value);
@@ -73,6 +84,8 @@ function mountSettingsPanel() {
         panel.querySelector('.facets-panel-lang span').textContent = t('language');
         panel.querySelector('[data-facets-lang]').innerHTML = langOptions();
         panel.querySelector('.facets-panel-version').textContent = t('version', { v: VERSION });
+        const theme = panel.querySelector('.facets-panel-theme span');
+        if (theme) theme.textContent = t('follow_theme');
     }
 }
 
@@ -195,6 +208,11 @@ async function init() {
     startObservers();
     applyAllSoon();
     document.addEventListener('facets:lang', () => { mountSettingsPanel(); mountWand(); });
+    // 0.9.0: the theme switch lives in both places; keep the drawer checkbox in step with the ⚙ one.
+    document.addEventListener('facets:theme', () => {
+        const box = document.querySelector('#facets_settings [data-facets-theme]');
+        if (box) box.checked = !!settings().followTheme;
+    });
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isOpen() && !document.querySelector('dialog[open]')) requestClose();
     });

@@ -75,6 +75,9 @@ const STRINGS = {
         reset: 'Reset',
 
         settings_title: 'Settings',
+        wardrobe_title: 'Wardrobe',
+        follow_theme: 'Follow SillyTavern theme',
+        follow_theme_note: 'Off: Facets\' own look (light or dark, like your theme). On: the wardrobe uses your SillyTavern colours. The Photo Booth keeps its own look.',
         show_where: 'Where to show',
         show_chat: 'Chat message avatars',
         show_list: 'Character list, info page, recent chats',
@@ -399,6 +402,9 @@ const STRINGS = {
         reset: '원래대로',
 
         settings_title: '설정',
+        wardrobe_title: '옷장',
+        follow_theme: '실리태번 테마 따라가기',
+        follow_theme_note: '끄면 Facets 테마(실리태번 테마에 맞춰 밝게·어둡게). 켜면 옷장이 실리태번 색을 써요. 포토부스는 늘 Facets 테마예요.',
         show_where: '보이는 곳',
         show_chat: '채팅 아바타',
         show_list: '캐릭터 목록·정보 화면·최근 채팅',

@@ -49,6 +49,7 @@ const state = {
     roomTab: 'outfits', // outfits | stickers
     borderPid: '', // piece whose border is being edited
     frameColor: COLORS[1], // colour picked before a frame is chosen
+    dark: true, // 0.9.0: SillyTavern's theme is dark (Facets' own look follows it)
 };
 
 const BOOTH_SCREENS = new Set(['booth', 'room', 'border', 'frame']);
@@ -184,7 +185,7 @@ export function openWardrobe({ fromSettings = false } = {}) {
     else state.scope = 'chat';
     root.hidden = false;
     document.documentElement.classList.add('facets-open');
-    syncTheme(root);
+    state.dark = syncTheme(root);
     startViewport(root);
     render();
 }
@@ -277,10 +278,13 @@ function render() {
         case 'frame': [head, body, foot] = viewFrame(); break;
     }
     const booth = BOOTH_SCREENS.has(state.screen);
+    // 0.9.0: Facets' own look everywhere, unless "Follow SillyTavern theme" is on (the Photo Booth keeps its own look).
+    const own = booth || !settings().followTheme;
+    const look = own ? ` facets-ft ${state.dark ? 'is-dark' : 'is-light'}` : '';
     const lang = getLanguage();
     root.innerHTML = `
       <div class="facets-backdrop" data-act="close"></div>
-      <div class="facets-sheet${booth ? ' facets-booth' : ''}" role="dialog" aria-modal="true" aria-label="${esc(t('ext_name'))}" lang="${lang}">
+      <div class="facets-sheet${booth ? ' facets-booth' : ''}${look}" role="dialog" aria-modal="true" aria-label="${esc(t('ext_name'))}" lang="${lang}">
         <div class="facets-head">${head}
           <button type="button" class="facets-iconbtn facets-close" data-act="close" title="${esc(t('close'))}" aria-label="${esc(t('close'))}"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -303,25 +307,8 @@ function headTitle(title) {
 }
 
 function headWardrobe() {
-    const key = activeKey();
-    let nameHtml;
-    if (state.fromSettings) {
-        const opts = state.tab === 'char'
-            ? allCharacters().map(c => [charKey(c.avatar), c.name])
-            : allPersonas().map(p => [personaKey(p.avatar), p.name]);
-        nameHtml = opts.length
-            ? `<select class="facets-select facets-entity" data-act="entity" aria-label="${esc(t(state.tab === 'char' ? 'pick_character' : 'pick_persona'))}">
-                ${opts.map(([k, n]) => `<option value="${esc(k)}"${k === key ? ' selected' : ''}>${esc(n)}</option>`).join('')}
-              </select>`
-            : '';
-    } else {
-        nameHtml = `<div class="facets-name" title="${esc(displayName(key))}">${esc(displayName(key))}</div>`;
-    }
-    return `<div class="facets-tabs" role="tablist">
-        <button type="button" role="tab" class="facets-tab${state.tab === 'char' ? ' on' : ''}" data-act="tab" data-tab="char" aria-selected="${state.tab === 'char'}">${esc(t('tab_character'))}</button>
-        <button type="button" role="tab" class="facets-tab${state.tab === 'persona' ? ' on' : ''}" data-act="tab" data-tab="persona" aria-selected="${state.tab === 'persona'}">${esc(t('tab_persona'))}</button>
-      </div>
-      ${nameHtml}
+    // 0.9.0: the character / me picker moved into the body (whoPicker), like the Photo Booth.
+    return `<div class="facets-title">${esc(t('wardrobe_title'))}</div>
       <button type="button" class="facets-iconbtn" data-act="settings" title="${esc(t('settings'))}" aria-label="${esc(t('settings'))}"><i class="fa-solid fa-gear"></i></button>`;
 }
 
@@ -336,7 +323,7 @@ function viewWardrobe() {
     if (!key) {
         const msg = !state.fromSettings && sc.inGroup ? 'group_unsupported'
             : state.tab === 'char' ? 'no_character' : 'no_persona';
-        return [head, emptyNote(msg), ''];
+        return [head, whoPicker('tab') + emptyNote(msg), ''];
     }
     const e = entityFor(key);
     const chatKey = chatAvailable() ? sc.chatKey : null;
@@ -364,8 +351,11 @@ function viewWardrobe() {
         ? `<button type="button" class="facets-btn facets-small" data-act="history" title="${esc(t('history'))}"><i class="fa-solid fa-clock-rotate-left"></i><span>${esc(t('history_short'))}</span></button>` : '';
     const diceBtn = chatKey && e.outfits.length
         ? `<button type="button" class="facets-btn facets-small" data-act="dice" title="${esc(t('dice'))}" aria-label="${esc(t('dice'))}"><i class="fa-solid fa-dice"></i></button>` : '';
-    let body = `${state.fromSettings ? leftoverBar() : ''}<div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
-        <div class="facets-aibar">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
+    // 0.9.0: what is worn and what the AI is told, in one card.
+    let body = `${whoPicker('tab')}${state.fromSettings ? leftoverBar() : ''}<div class="facets-card facets-nowcard">
+        <div class="facets-statusrow"><div class="facets-status" title="${esc(status)}">${esc(status)}</div>${historyBtn}${diceBtn}</div>
+        <div class="facets-nowcard-ai">${toggleRow('tellAI', t('tell_ai_short'), t('tell_ai_note'))}${aiStateHtml(key, chatKey)}</div>
+      </div>
         ${chatKey && e.outfits.length ? randomRow(e, key, chatKey) : ''}
         ${boothRow()}
         ${drawerChips(e, drawer)}
@@ -390,8 +380,8 @@ function viewWardrobe() {
     const foot = `${seg}${sinceRow}
       <div class="facets-row">
         <button type="button" class="facets-btn" data-act="wear-default" title="${esc(t('default_look'))}">${esc(t('default_look'))}</button>
-        ${addButton()}
-        <button type="button" class="facets-btn facets-primary" data-act="organize" title="${esc(t('organize'))}">${esc(t('organize'))}</button>
+        ${addButton(true)}
+        <button type="button" class="facets-btn" data-act="organize" title="${esc(t('organize'))}">${esc(t('organize'))}</button>
       </div>`;
     return [head, body, foot];
 }
@@ -458,7 +448,7 @@ function viewBooth() {
 }
 
 /** Character / me picker used in the Photo Booth (and the name of who is picked). */
-function whoPicker() {
+function whoPicker(act = 'booth-who') {
     const key = activeKey();
     let name = `<div class="facets-booth-who" title="${esc(displayName(key))}">${esc(key ? displayName(key) : '')}</div>`;
     if (state.fromSettings) {
@@ -468,7 +458,7 @@ function whoPicker() {
         name = opts.length ? `<select class="facets-select facets-entity" data-act="entity" aria-label="${esc(t(state.tab === 'char' ? 'pick_character' : 'pick_persona'))}">
             ${opts.map(([k, n]) => `<option value="${esc(k)}"${k === key ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>` : '';
     }
-    const b = (tab, label) => `<button type="button" role="radio" class="facets-segbtn${state.tab === tab ? ' on' : ''}" data-act="booth-who" data-tab="${tab}" aria-checked="${state.tab === tab}">${esc(label)}</button>`;
+    const b = (tab, label) => `<button type="button" role="radio" class="facets-segbtn${state.tab === tab ? ' on' : ''}" data-act="${act}" data-tab="${tab}" aria-checked="${state.tab === tab}">${esc(label)}</button>`;
     return `<div class="facets-whorow"><div class="facets-seg" role="radiogroup">${b('char', t('tab_character'))}${b('persona', t('who_me'))}</div>${name}</div>`;
 }
 
@@ -515,14 +505,15 @@ function roomOutfits(key) {
         ${states.join('')}
         <div class="facets-btnrow">
           <button type="button" class="facets-btn facets-small facets-jellybtn" data-act="border" data-pid="${esc(key)}"><i class="fa-solid fa-wand-magic-sparkles"></i><span>${esc(t('border_btn'))}</span></button>
+          <span class="facets-btnrow-gap"></span>
           <span class="facets-turnrow">
             <button type="button" class="facets-iconbtn" data-act="stage-turn" data-dir="-1" title="${esc(t('stage_rot_left'))}" aria-label="${esc(t('stage_rot_left'))}"><i class="fa-solid fa-rotate-left"></i></button>
             <span class="facets-turndeg" title="${esc(t('stage_rot'))}">${Math.round(rotOf(key))}°</span>
             <button type="button" class="facets-iconbtn" data-act="stage-turn" data-dir="1" title="${esc(t('stage_rot_right'))}" aria-label="${esc(t('stage_rot_right'))}"><i class="fa-solid fa-rotate-right"></i></button>
           </span>
-          <button type="button" class="facets-btn facets-small" data-act="stage-reset" title="${esc(t('stage_reset_note', { kind }))}"><i class="fa-solid fa-arrows-to-dot"></i><span>${esc(t('stage_reset'))}</span></button>
+          <button type="button" class="facets-iconbtn facets-pin-opt${st.flip ? ' on' : ''}" data-act="stage-flip-btn" aria-pressed="${!!st.flip}" title="${esc(t('stage_flip'))}" aria-label="${esc(t('stage_flip'))}"><i class="fa-solid fa-arrows-left-right"></i></button>
+          <button type="button" class="facets-iconbtn" data-act="stage-reset" title="${esc(`${t('stage_reset')} · ${t('stage_reset_note', { kind })}`)}" aria-label="${esc(t('stage_reset'))}"><i class="fa-solid fa-arrows-to-dot"></i></button>
         </div>
-        ${sw('stage-flip', st.flip, t('stage_flip'))}
       </div>`;
     return `${main}${pinSection(key)}<div class="facets-note">${esc(t('stage_how'))}</div>`;
 }
@@ -612,7 +603,8 @@ function viewBorder() {
     const cut = isCutShape(d);
     // 0.8.1: move and zoom the picture inside a circle, heart or star.
     const zoomPct = Math.round((d?.zoom || 1) * 100);
-    const moveCard = cut ? `<div class="facets-card facets-movecard"><div class="facets-card-title">${esc(t('border_move'))}</div>
+    // 0.9.0: moving / zooming sits in the shape card, under the shapes.
+    const moveCard = cut ? `<div class="facets-movecard"><div class="facets-card-title">${esc(t('border_move'))}</div>
           <div class="facets-note">${esc(t('border_move_hint'))}</div>
           <div class="facets-zoomrow"><span class="facets-zoomlabel">${esc(t('border_zoom'))}</span>
             <button type="button" class="facets-iconbtn" data-act="deco-zoom-step" data-dir="-1" title="${esc(t('zoom_out'))}" aria-label="${esc(t('zoom_out'))}"><i class="fa-solid fa-minus"></i></button>
@@ -624,9 +616,9 @@ function viewBorder() {
     const body = `<div class="facets-bprev${info.pinned ? '' : ' is-main'}${cut ? ' is-movable' : ''}"><div class="facets-fig facets-bprev-fig"><img alt="" draggable="false"></div></div>
       <div class="facets-booth-who facets-center" title="${esc(info.name)}">${esc(`${displayName(info.ek)} · ${info.name}`)}</div>
       <div class="facets-stack">
-        ${moveCard}
         <div class="facets-card"><div class="facets-card-title">${esc(t('border_shape'))}</div><div class="facets-chips">${shapes}</div>
-          ${notes.map(n => `<div class="facets-note">${esc(n)}</div>`).join('')}</div>
+          ${notes.map(n => `<div class="facets-note">${esc(n)}</div>`).join('')}
+          ${moveCard}</div>
         <div class="facets-card"><div class="facets-card-title">${esc(t('border_pattern'))}</div><div class="facets-patgrid">${pats}</div></div>
         <div class="facets-card"><div class="facets-card-title">${esc(t('border_color'))}</div>${colorRow}
           ${fixed ? `<div class="facets-note">${esc(t('border_fixed_color'))}</div>` : ''}</div>
@@ -635,9 +627,8 @@ function viewBorder() {
           ${sw('deco-glitter', !!d?.glitter, t('border_glitter'), t('border_glitter_note'))}
           ${sw('deco-blink', !!d?.blink, t('border_blink'), t('border_blink_note'), d?.glitter ? '' : ' disabled')}
         </div>
-        <div class="facets-row"><button type="button" class="facets-btn facets-danger" data-act="deco-none"${d ? '' : ' disabled'}>${esc(t('border_none'))}</button></div>
       </div>`;
-    const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
+    const foot = `<div class="facets-row facets-row-split"><button type="button" class="facets-btn facets-danger" data-act="deco-none"${d ? '' : ' disabled'} title="${esc(t('border_none'))}">${esc(t('border_none'))}</button><button type="button" class="facets-btn facets-primary facets-wide" data-act="back">${esc(t('done'))}</button></div>`;
     return [headTitle(t('border_title')), body, foot];
 }
 
@@ -919,8 +910,8 @@ function drawerChips(e, drawer) {
       </div>`;
 }
 
-function addButton() {
-    return `<label class="facets-btn" role="button" tabindex="0" title="${esc(t('add_outfit'))}"><i class="fa-solid fa-plus"></i><span>${esc(t('add_short'))}</span>
+function addButton(primary = false) {
+    return `<label class="facets-btn${primary ? ' facets-primary' : ''}" role="button" tabindex="0" title="${esc(t('add_outfit'))}"><i class="fa-solid fa-plus"></i><span>${esc(t('add_short'))}</span>
         <input type="file" accept="image/*" multiple class="facets-file" data-act="add-files" hidden></label>`;
 }
 
@@ -1295,6 +1286,7 @@ function viewSettings() {
           ${toggleRow('autoPair', t('auto_pair'), t('auto_pair_note'))}
         </div>
         <div class="facets-section">
+          ${toggleRow('followTheme', t('follow_theme'), t('follow_theme_note'))}
           <label class="facets-field">
             <span class="facets-flabel">${esc(t('language'))}</span>
             <select class="facets-select" data-act="lang">
@@ -1819,6 +1811,14 @@ function onClick(e) {
             if (el.dataset.to === 'room') { state.roomFrom = 'booth'; state.roomTab = 'outfits'; }
             state.screen = el.dataset.to === 'frame' ? 'frame' : 'room';
             render(); break;
+        case 'stage-flip-btn': {
+            const key = activeKey();
+            if (!key) break;
+            entityFor(key);
+            const st = stageOf(key, true);
+            st.flip = !st.flip;
+            save(); applyAllSoon(); render(); break;
+        }
         case 'booth-who': state.tab = el.dataset.tab === 'persona' ? 'persona' : 'char'; render(); break;
         case 'room-tab': state.roomTab = el.dataset.tab === 'stickers' ? 'stickers' : 'outfits'; render(); break;
         case 'border': {
@@ -2032,7 +2032,8 @@ function onChange(e) {
         settings()[el.dataset.setting] = el.checked;
         save();
         applyAllSoon();
-        if (state.screen === 'wardrobe') render();
+        if (state.screen === 'wardrobe' || el.dataset.setting === 'followTheme') render();
+        if (el.dataset.setting === 'followTheme') document.dispatchEvent(new CustomEvent('facets:theme'));
         return;
     }
     switch (act) {

@@ -28,6 +28,7 @@ const DEFAULTS = Object.freeze({
     ignoreWords: DEFAULT_IGNORE,
     showStage: true, // "In the chat" pictures (each character / persona still starts off)
     stageKbHide: true, // hide them while a phone keyboard is open
+    followTheme: false, // 0.9.0: false = Facets' own look (light/dark from SillyTavern); true = the wardrobe follows the SillyTavern theme
     // key -> { name, outfits: Outfit[], drawers: Drawer[], global: outfitId|null, stage?: Stage }
     // key is "char:<avatar file>" or "persona:<avatar file>"
     entities: {},
