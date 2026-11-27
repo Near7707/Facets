@@ -1438,37 +1438,40 @@ function viewEdit() {
           <label class="facets-btn" role="button" tabindex="0" title="${esc(t('replace_image'))}">${esc(t('replace_image'))}
             <input type="file" accept="image/*" data-act="replace-file" hidden></label>
         </div>
-        <label class="facets-field">
-          <span class="facets-flabel facets-flabel-stack">${esc(t('name_label'))} <small>${esc(t('name_note'))}</small></span>
-          <input type="text" class="facets-input" data-field="name" maxlength="60" value="${esc(state.draft.name)}" placeholder="${esc(t('name_ph'))}" autocomplete="off">
-        </label>
-        <label class="facets-field">
-          <span class="facets-flabel facets-flabel-stack">${esc(t('desc_label'))} <small>${esc(t('desc_note'))}</small></span>
-          <textarea class="facets-input facets-textarea" data-field="desc" rows="3" maxlength="1000" placeholder="${esc(t('desc_ph'))}">${esc(state.draft.desc)}</textarea>
-        </label>
-        <label class="facets-field">
-          <span class="facets-flabel facets-flabel-stack">${esc(t('kw_label'))} <small>${esc(t('kw_note'))}</small></span>
-          <input type="text" class="facets-input" data-field="kw" maxlength="300" value="${esc(state.draft.kw)}" placeholder="${esc(t('kw_ph'))}" autocomplete="off">
-        </label>
-        <div class="facets-field">
-          <span class="facets-flabel facets-flabel-stack">${esc(t('drawers'))} <small>${esc(t('drawer_multi_note'))}</small></span>
-          ${e.drawers.length
-              ? `<div class="facets-chips facets-chips-wrap">${e.drawers.map((d, i) => {
-                  const on = state.draft.drawers.includes(d.id);
-                  return `<button type="button" class="facets-chip${on ? ' on' : ''}" data-act="edit-drawer" data-id="${esc(d.id)}" aria-pressed="${on}" title="${esc(drawerLabel(d, i))}">${on ? '<i class="fa-solid fa-check"></i> ' : ''}${esc(drawerLabel(d, i))}</button>`;
-              }).join('')}</div>`
-              : `<div class="facets-note">${esc(t('drawer_none_edit'))}</div>`}
-        </div>
-        <div class="facets-field">
-          <span class="facets-flabel">${esc(t('pair_label'))}</span>
-          <div class="facets-pair">
-            <div class="facets-pair-thumb">${pair ? `<img src="${esc(urlOf(pair.sq || pair.orig))}" alt="">` : '<i class="fa-solid fa-link-slash"></i>'}</div>
-            <div class="facets-pair-name">${pair ? `${esc(displayName(o.pair.key))} · ${esc(outfitLabel(pair, pairIdx))}` : esc(t('pair_none'))}</div>
-            <button type="button" class="facets-btn facets-small" data-act="pair">${esc(t('pair_change'))}</button>
+        ${setCard('edit_info_title', 'set_tag_outfit', `
+          <label class="facets-field">
+            <span class="facets-flabel facets-flabel-stack">${esc(t('name_label'))} <small>${esc(t('name_note'))}</small></span>
+            <input type="text" class="facets-input" data-field="name" maxlength="60" value="${esc(state.draft.name)}" placeholder="${esc(t('name_ph'))}" autocomplete="off">
+          </label>
+          <label class="facets-field">
+            <span class="facets-flabel facets-flabel-stack">${esc(t('desc_label'))} <small>${esc(t('desc_note'))}</small></span>
+            <textarea class="facets-input facets-textarea" data-field="desc" rows="3" maxlength="1000" placeholder="${esc(t('desc_ph'))}">${esc(state.draft.desc)}</textarea>
+          </label>`)}
+        ${setCard('auto_title', 'set_tag_auto', `
+          <label class="facets-field">
+            <span class="facets-flabel facets-flabel-stack">${esc(t('kw_label'))} <small>${esc(t('kw_note'))}</small></span>
+            <input type="text" class="facets-input" data-field="kw" maxlength="300" value="${esc(state.draft.kw)}" placeholder="${esc(t('kw_ph'))}" autocomplete="off">
+          </label>`)}
+        ${setCard('edit_sort_title', 'set_tag_sort', `
+          <div class="facets-field">
+            <span class="facets-flabel facets-flabel-stack">${esc(t('drawers'))} <small>${esc(t('drawer_multi_note'))}</small></span>
+            ${e.drawers.length
+                ? `<div class="facets-chips facets-chips-wrap">${e.drawers.map((d, i) => {
+                    const on = state.draft.drawers.includes(d.id);
+                    return `<button type="button" class="facets-chip${on ? ' on' : ''}" data-act="edit-drawer" data-id="${esc(d.id)}" aria-pressed="${on}" title="${esc(drawerLabel(d, i))}">${on ? '<i class="fa-solid fa-check"></i> ' : ''}${esc(drawerLabel(d, i))}</button>`;
+                }).join('')}</div>`
+                : `<div class="facets-note">${esc(t('drawer_none_edit'))}</div>`}
           </div>
-          <div class="facets-note">${esc(t(isCharKey(key) ? 'pair_hint_char' : 'pair_hint_persona'))}</div>
-        </div>
-        <button type="button" class="facets-btn facets-danger facets-wide" data-act="delete-outfit">${esc(t('delete_outfit'))}</button>
+          <div class="facets-field">
+            <span class="facets-flabel facets-flabel-stack">${esc(t('pair_label'))} <small>${esc(t(isCharKey(key) ? 'pair_hint_char' : 'pair_hint_persona'))}</small></span>
+            <div class="facets-pair">
+              <div class="facets-pair-thumb">${pair ? `<img src="${esc(urlOf(pair.sq || pair.orig))}" alt="">` : '<i class="fa-solid fa-link-slash"></i>'}</div>
+              <div class="facets-pair-name">${pair ? `${esc(displayName(o.pair.key))} · ${esc(outfitLabel(pair, pairIdx))}` : esc(t('pair_none'))}</div>
+              <button type="button" class="facets-btn facets-small" data-act="pair">${esc(t('pair_change'))}</button>
+            </div>
+          </div>`)}
+        ${setCard('danger', 'set_tag_danger', `
+          <button type="button" class="facets-btn facets-danger facets-wide" data-act="delete-outfit">${esc(t('delete_outfit'))}</button>`, ' facets-danger-zone')}
       </div>`;
     const foot = `<div class="facets-row"><button type="button" class="facets-btn facets-primary facets-wide" data-act="save-edit">${esc(t('save'))}</button></div>`;
     return [head, body, foot];
