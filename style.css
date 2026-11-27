@@ -1980,3 +1980,12 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-sheet.facets-ft {
     font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
 }
+
+/* ---- 0.9.8 small fixes ---- */
+/* "From now on" stays in the line with "Whole character", dimmed and not clickable. */
+.facets-since-mini.is-off { opacity: 0.42; cursor: default; }
+.facets-since-mini.is-off .facets-switch { cursor: default; }
+/* Photo Booth cards: names in the middle. */
+.facets-sheet .facets-btile-cap { justify-content: center; width: 100%; text-align: center; }
+/* A note under its field name, not beside it. */
+.facets-flabel-stack small { display: block; margin: 3px 0 0; }

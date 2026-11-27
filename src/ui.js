@@ -415,10 +415,12 @@ function viewWardrobe() {
           </div>`
         : '';
     // 0.9.1: "From now on" sits beside the picker as one short line (the note is in ⚙ Settings).
-    const since = chatKey && state.scope === 'chat'
-        ? `<label class="facets-toggle facets-since-mini" title="${esc(t('since_note'))}">
+    // 0.9.8: always there so the line keeps its shape; dimmed and not clickable with "whole character".
+    const sinceOff = state.scope !== 'chat';
+    const since = chatKey
+        ? `<label class="facets-toggle facets-since-mini${sinceOff ? ' is-off' : ''}" title="${esc(sinceOff ? t('since_off') : t('since_note'))}">
             <span class="facets-toggle-text"><span>${esc(t('since_label'))}</span></span>
-            <input type="checkbox" data-setting="sinceMode"${settings().sinceMode ? ' checked' : ''}>
+            <input type="checkbox" data-setting="sinceMode"${settings().sinceMode ? ' checked' : ''}${sinceOff ? ' disabled' : ''}>
             <span class="facets-switch" aria-hidden="true"></span>
           </label>` : '';
     const foot = `${seg ? `<div class="facets-segline">${seg}${since}</div>` : ''}
@@ -1381,7 +1383,7 @@ function viewSettings() {
           <div class="facets-stitle">${esc(t('auto_title'))}</div>
           ${toggleRow('autoKeywords', t('auto_kw'), t('auto_kw_note'))}
           <label class="facets-field">
-            <span class="facets-flabel">${esc(t('ignore_label'))} <small>${esc(t('ignore_note'))}</small></span>
+            <span class="facets-flabel facets-flabel-stack">${esc(t('ignore_label'))} <small>${esc(t('ignore_note'))}</small></span>
             <textarea class="facets-input facets-textarea" data-setting-text="ignoreWords" rows="2" maxlength="1000">${esc(settings().ignoreWords)}</textarea>
           </label>
           <button type="button" class="facets-btn facets-small" data-act="ignore-reset">${esc(t('ignore_reset'))}</button>
