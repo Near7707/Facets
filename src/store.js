@@ -20,7 +20,7 @@ const DEFAULTS = Object.freeze({
     showInChat: true,
     showInList: true,
     tellAI: false, // off until the user turns it on
-    tellCount: 3, // after a change, describe the look for this many AI replies (0 = every time)
+    tellCount: 1, // 0.9.3: 1 for new installs (was 3). After a change, describe the look for this many AI replies (0 = every time)
     sinceMode: false, // "From now on": a change keeps older messages in the older outfit
     backupImages: true,
     autoKeywords: true, // change outfits when an AI reply uses their words
@@ -128,7 +128,7 @@ export function migrate(s) {
         }
         if (!Object.keys(row).length) delete s.frames[ck];
     }
-    if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 3;
+    if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 1;
     if (!THEMES.includes(s.theme)) s.theme = 'st';
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;
     for (const row of Object.values(s.timelines)) {

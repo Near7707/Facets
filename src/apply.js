@@ -255,9 +255,33 @@ export function restoreEverything() {
 
 let lastFrameCss = '';
 
-const holderSel = (wrap, tag) => wrap
-    ? [`#chat .mes .mesAvatarWrapper:has(img[data-facets-frame="${tag}"])`, `#chat .mes .mesAvatarWrapper:has(img[data-facets-frame="${tag}"]) .avatar`]
-    : [`#chat .mes .avatar:has(img[data-facets-frame="${tag}"])`, `#chat .mes .avatar img[data-facets-frame="${tag}"]`];
+// 0.9.3: some themes make .mesAvatarWrapper "display: contents" (no box of its own), so the deco
+// hangs on the message box (.mes) there instead. The avatar box itself is the last resort (it may clip).
+const holderSel = (kind, tag) => {
+    const img = `img[data-facets-frame="${tag}"]`;
+    if (kind === 'wrap') return [`#chat .mes .mesAvatarWrapper:has(${img})`, `#chat .mes .mesAvatarWrapper:has(${img}) .avatar`];
+    if (kind === 'mes') return [`#chat .mes:has(.avatar ${img})`, `#chat .mes:has(.avatar ${img}) .avatar`];
+    return [`#chat .mes .avatar:has(${img})`, `#chat .mes .avatar ${img}`];
+};
+
+const hasBox = (el) => {
+    if (!el) return false;
+    const cs = getComputedStyle(el);
+    return cs.display !== 'contents' && cs.display !== 'none';
+};
+const clips = (el) => {
+    const cs = getComputedStyle(el);
+    return cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
+};
+
+/** The box the deco is drawn on: the avatar's wrapper when it has a box and doesn't clip, else the message. */
+function frameHolder(img) {
+    const wrap = img.closest('.mesAvatarWrapper');
+    if (hasBox(wrap) && !clips(wrap)) return { el: wrap, kind: 'wrap' };
+    const mes = img.closest('.mes');
+    if (hasBox(mes)) return { el: mes, kind: 'mes' };
+    return { el: img.closest('.avatar'), kind: 'avatar' };
+}
 
 export function applyFrames() {
     const sc = currentScene();
@@ -268,7 +292,7 @@ export function applyFrames() {
     }
     let radius = '';
     let box = null;
-    let wrap = true;
+    let kind = 'wrap';
     for (const img of document.querySelectorAll('#chat .mes .avatar img')) {
         const key = (want.c || want.p) ? keyFromSrc(originalSrc(img)) : null;
         const tag = key && key === sc.charKey && want.c ? 'c' : key && key === sc.personaKey && want.p ? 'p' : '';
@@ -276,12 +300,14 @@ export function applyFrames() {
             if (img.dataset.facetsFrame !== tag) img.dataset.facetsFrame = tag;
             if (!box) {
                 // Where the picture sits in its holder box (every chat avatar has the same size).
-                const holder = img.closest('.mesAvatarWrapper') || img.closest('.avatar');
-                wrap = !!holder?.classList.contains('mesAvatarWrapper');
+                const holder = frameHolder(img);
+                kind = holder.kind;
                 const r = img.getBoundingClientRect();
-                const o = holder?.getBoundingClientRect();
-                if (o && r.width > 0 && r.height > 0) {
-                    box = { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
+                const o = holder.el?.getBoundingClientRect();
+                if (o && o.width > 0 && r.width > 0 && r.height > 0) {
+                    // Measured from the holder's padding edge, where position: absolute starts.
+                    const h = holder.el;
+                    box = { x: r.left - o.left - h.clientLeft, y: r.top - o.top - h.clientTop, w: r.width, h: r.height };
                     radius = getComputedStyle(img).borderRadius;
                 }
             }
@@ -289,7 +315,7 @@ export function applyFrames() {
     }
     // The ring follows the avatar's own corner radius (round, square, rounded or tall rectangle).
     const r = /^[\d.]+(px|%)$/.test(radius) ? radius : '50%';
-    const C = holderSel(wrap, 'c'), P = holderSel(wrap, 'p');
+    const C = holderSel(kind, 'c'), P = holderSel(kind, 'p');
     const css = frameCss(C[0], C[1], want.c, r, box) + frameCss(P[0], P[1], want.p, r, box);
     if (css === lastFrameCss) return;
     lastFrameCss = css;

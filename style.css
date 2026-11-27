@@ -962,6 +962,7 @@ html.facets-open body { overscroll-behavior: none; }
     .facets-fig-spark span, .facets-fig-back.is-holo,
     #chat .mes .avatar::before, #chat .mes .avatar::after,
     #chat .mes .mesAvatarWrapper::before, #chat .mes .mesAvatarWrapper::after,
+    #chat .mes::before, #chat .mes::after,
     .facets-booth .facets-fav::before, .facets-booth .facets-fav::after { animation: none !important; }
 }
 
