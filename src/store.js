@@ -148,7 +148,9 @@ export function migrate(s) {
     if (!Array.isArray(s.myStickers)) s.myStickers = [];
     if (!cleaned.has(s.myStickers)) {
         s.myStickers = s.myStickers.filter(m => m && typeof m.id === 'string' && m.id && typeof m.path === 'string' && m.path)
-            .map(m => ({ id: m.id, path: m.path, name: typeof m.name === 'string' ? m.name.slice(0, 40) : '' }));
+            .map(m => ({ id: m.id, path: m.path, name: typeof m.name === 'string' ? m.name.slice(0, 40) : '',
+                // 0.12.1: a copy of a photocard (which one, and which save of it)
+                ...(typeof m.card === 'string' && m.card ? { card: m.card, cardT: Number.isFinite(m.cardT) ? m.cardT : 0 } : {}) }));
         cleaned.add(s.myStickers);
     }
     for (const [ck, row] of Object.entries(s.stickers)) {
@@ -502,9 +504,10 @@ export function removeSticker(chatKey, id) {
 }
 
 /** Add one of your own sticker pictures (already uploaded). */
-export function addMySticker(path, name = '') {
+export function addMySticker(path, name = '', from = null) {
     const s = settings();
     const m = { id: newId(), path, name: String(name || '').slice(0, 40) };
+    if (from?.card) { m.card = from.card; m.cardT = Number.isFinite(from.cardT) ? from.cardT : 0; }
     s.myStickers = [...s.myStickers, m];
     cleaned.add(s.myStickers);
     save();

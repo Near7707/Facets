@@ -92,6 +92,7 @@ async function startCard(baseId) {
 
 function enterEditor() {
     if (!loadDraft()) return;
+    H.state.stickerEdit = false;
     H.state.screen = 'card';
     H.render();
 }
@@ -107,6 +108,7 @@ export function openCards() {
 export function cardBack() {
     const st = H.state;
     if (st.screen === 'card') { ed.sheet = null; ed.sel = null; st.screen = 'cards'; return true; }
+    if (st.screen === 'cards' && ed.sheet) { ed.sheet = null; return true; }
     if (st.screen === 'cards') { ed.organize = false; st.screen = 'booth'; return true; }
     return false;
 }
@@ -133,7 +135,7 @@ export function viewCards() {
     }
     const tiles = list.map((c) => {
         const name = cardName(c.id);
-        const act = ed.organize ? 'card-delete' : 'card-open';
+        const act = ed.organize ? 'card-delete' : 'card-view'; // 0.12.1: tap opens the view (download, stick, edit)
         const label = ed.organize ? `${t('delete')} · ${name}` : name;
         return `<button type="button" class="facets-cb-tile${ed.organize ? ' is-edit' : ''}" data-act="${act}" data-id="${esc(c.id)}" title="${esc(label)}" aria-label="${esc(label)}">
             <img src="${esc(urlOf(c.out))}" alt="" draggable="false" loading="lazy" onerror="this.parentNode.classList.add('broken')">
@@ -149,7 +151,28 @@ export function viewCards() {
         <div class="facets-cb-grid">${add}${tiles}</div>
         <div class="facets-note">${esc(t(ed.organize ? 'cards_delete_note' : 'cards_note'))}</div>
       </div>`;
+    // 0.12.1: a saved photocard opens as its own page (download / stick in chat / edit).
+    if (ed.sheet?.list) return [`${H.headTitle(cardName(ed.sheet.id))}${H.settingsButton()}`, sheetHtml(), ''];
     return [`${H.headTitle(t('booth_card'))}${H.settingsButton()}`, body, ''];
+}
+
+/** 0.12.1: open a saved photocard in the same window as after saving (download / stick in chat / edit). */
+async function viewSaved(id) {
+    const c = findCard(id);
+    if (!c?.out) { startCard(id); return; }
+    let ok = false;
+    await H.withBusy(async () => {
+        const img = await loadImage(urlOf(c.out));
+        if (!img?.naturalWidth) throw new Error('no picture');
+        const cv = document.createElement('canvas');
+        cv.width = img.naturalWidth;
+        cv.height = img.naturalHeight;
+        cv.getContext('2d').drawImage(img, 0, 0);
+        ed.sheet = { url: urlOf(c.out), canvas: cv, id, stuck: false, pad: cv.width > CARD_W ? CARD_PAD : 0, over: false, list: true };
+        ok = true;
+    }, () => {});
+    if (!ok) { startCard(id); return; }
+    H.render();
 }
 
 // ---------- workbench ----------
@@ -321,16 +344,23 @@ function panelStickers() {
         return `<button type="button" class="facets-stk-tile" data-act="card-add-stk" data-kind="basic" data-ref="${id}" title="${esc(name)}" aria-label="${esc(t('stk_add', { name }))}"${lock}>
             <img src="${esc(basicUrl(id, s.stickerLook, s.stickerSpark, false))}" alt="" draggable="false"><span>${esc(name)}</span></button>`;
     }).join('');
-    const mine = s.myStickers.map((m, i) => {
+    // 0.12.1: copies of photocards stay out of here (no photocard inside a photocard); [Organize] deletes.
+    const edit = H.state.stickerEdit === true;
+    const mine = s.myStickers.map((m, i) => [m, i]).filter(([m]) => !m.card).map(([m, i]) => {
         const name = m.name || t('stk_mine_n', { n: i + 1 });
+        if (edit) {
+            return `<button type="button" class="facets-stk-tile is-mine is-edit" data-act="stk-del" data-id="${esc(m.id)}" title="${esc(t('stk_delete'))}" aria-label="${esc(`${t('stk_delete')} · ${name}`)}">
+            <img src="${esc(urlOf(m.path))}" alt="" draggable="false" loading="lazy"><span>${esc(name)}</span><em class="facets-stk-del" aria-hidden="true">${icon('fa-trash-can')}</em></button>`;
+        }
         return `<button type="button" class="facets-stk-tile is-mine" data-act="card-add-stk" data-kind="mine" data-ref="${esc(m.id)}" title="${esc(name)}" aria-label="${esc(t('stk_add', { name }))}"${lock}>
             <img src="${esc(urlOf(m.path))}" alt="" draggable="false" loading="lazy"><span>${esc(name)}</span></button>`;
     }).join('');
+    const editBtn = `<button type="button" class="facets-btn facets-small${edit ? ' facets-primary' : ''}" data-act="stk-edit">${esc(t(edit ? 'done' : 'stk_organize'))}</button>`;
     return `<div class="facets-stk-lookrow"><div class="facets-seg" role="radiogroup" aria-label="${esc(t('stk_look'))}">${looks}</div>${spark}</div>
       <div class="facets-cb-pichead"><span class="facets-count">${esc(t('tape_count', { n, max: MAX_CARD_STICKERS }))}</span></div>
       <div class="facets-stk-grid">${basic}</div>
-      ${mine ? `<div class="facets-closet-head">${H.kicker(t('stk_mine_label'))}</div><div class="facets-stk-grid">${mine}</div>
-      <div class="facets-note">${esc(t('card_mine_note'))}</div>` : ''}
+      ${mine ? `<div class="facets-closet-head">${H.kicker(t('stk_mine_label'))}${editBtn}</div><div class="facets-stk-grid">${mine}</div>
+      <div class="facets-note">${esc(t(edit ? 'stk_delete_note' : 'card_mine_note'))}</div>` : ''}
       ${lock ? `<div class="facets-note">${esc(t('card_stk_full', { max: MAX_CARD_STICKERS }))}</div>` : ''}`;
 }
 
@@ -342,19 +372,21 @@ function sheetHtml() {
     const w = sh.canvas?.width || CARD_W, h = sh.canvas?.height || CARD_H;
     const size = t(sh.pad ? 'card_size_out' : 'card_size_card', { w, h });
     // "Card only" matters only when something hangs over the edge (or it is already on).
-    const only = sh.over || ed.card?.cardOnly ? `<label class="facets-toggle facets-cb-only">
+    const only = !sh.list && (sh.over || ed.card?.cardOnly) ? `<label class="facets-toggle facets-cb-only">
         <span class="facets-toggle-text"><span>${esc(t('card_only'))}</span><small>${esc(t('card_only_note'))}</small></span>
         <input type="checkbox" data-act="card-only"${ed.card?.cardOnly ? ' checked' : ''}>
         <span class="facets-switch" aria-hidden="true"></span></label>` : '';
-    return `<div class="facets-cb-sheetwrap"><div class="facets-cb-sheet" role="dialog" aria-label="${esc(t('card_saved_title'))}">
-        <div class="facets-cb-sheettop"><span class="facets-cb-sheetimg${sh.pad ? ' is-pad' : ''}"><img src="${esc(sh.url)}" alt="" draggable="false"></span><div><div class="facets-cb-sheettitle">${esc(t('card_saved_title'))}</div><div class="facets-note">${esc(t('card_saved_note'))}</div><div class="facets-note facets-cb-size-note">${esc(size)}</div></div></div>
+    const open = sh.list ? '<div class="facets-cb-sheet is-page">' : `<div class="facets-cb-sheetwrap"><div class="facets-cb-sheet" role="dialog" aria-label="${esc(t('card_saved_title'))}">`;
+    return `${open}
+        <div class="facets-cb-sheettop"><span class="facets-cb-sheetimg${sh.pad ? ' is-pad' : ''}"><img src="${esc(sh.url)}" alt="" draggable="false"></span><div><div class="facets-cb-sheettitle">${esc(sh.list ? cardName(sh.id) : t('card_saved_title'))}</div><div class="facets-note">${esc(t(sh.list ? 'card_view_note' : 'card_saved_note'))}</div><div class="facets-note facets-cb-size-note">${esc(size)}</div></div></div>
         ${only}
         ${btn('card-download', 'fa-download', t('card_download'), `${w} × ${h}`)}
         ${btn('card-stick', sh.stuck ? 'fa-check' : 'fa-thumbtack', t(sh.stuck ? 'card_stuck' : 'card_stick'), t(inChat ? 'card_stick_note' : 'card_stick_need_chat'), inChat && !sh.stuck ? '' : ' disabled')}
+        ${sh.list ? btn('card-edit', 'fa-pen', t('card_edit'), t('card_edit_sub')) : ''}
         <div class="facets-note">${esc(t('card_ios_note'))}</div>
         <div class="facets-note">${esc(t('card_keep_note'))}</div>
         <button type="button" class="facets-btn facets-primary facets-wide" data-act="card-sheet-done">${esc(t('done'))}</button>
-      </div></div>`;
+      </div>${sh.list ? '' : '</div>'}`;
 }
 
 export function viewCard() {
@@ -669,9 +701,15 @@ async function stickInChat() {
     const sh = ed.sheet;
     if (!sh?.canvas || sh.stuck || !H.chatAvailable()) return;
     await H.withBusy(async () => {
-        // 0.11.3: full size (it used to be cut down to 512px and looked blurry in the chat).
-        const path = await uploadDataURL(canvasData(sh.canvas), STICKER_FOLDER, `stk_${newId()}`);
-        const m = addMySticker(path, cardName(sh.id));
+        // 0.12.1: the same save of the same photocard reuses its copy instead of piling up new ones.
+        const card = findCard(sh.id);
+        let m = card ? settings().myStickers.find(x => x.card === card.id && x.cardT === card.t) : null;
+        if (m) H.toast('info', t('card_stick_again'));
+        else {
+            // 0.11.3: full size (it used to be cut down to 512px and looked blurry in the chat).
+            const path = await uploadDataURL(canvasData(sh.canvas), STICKER_FOLDER, `stk_${newId()}`);
+            m = addMySticker(path, cardName(sh.id), card ? { card: card.id, cardT: card.t } : null);
+        }
         // Its own copy: deleting the photocard later leaves this sticker alone.
         if (!addSticker(H.currentScene().chatKey, 'mine', m.id, 'cut', false)) H.toast('warning', t('stk_full', { max: MAX_STICKERS }));
         else H.toast('success', t('card_stuck'));
@@ -879,7 +917,7 @@ export function cardClick(act, el) {
             return true;
         case 'card-organize': ed.organize = !ed.organize; H.render(); return true;
         case 'card-delete': deleteCard(el.dataset.id); return true;
-        case 'card-tab': ed.tab = TABS.includes(el.dataset.tab) ? el.dataset.tab : 'pic'; H.render(); return true;
+        case 'card-tab': H.state.stickerEdit = false; ed.tab = TABS.includes(el.dataset.tab) ? el.dataset.tab : 'pic'; H.render(); return true;
         case 'card-tape': if (['pat', 'band', 'torn'].includes(el.dataset.k)) setTape(el.dataset.k, el.dataset.v); return true;
         case 'card-tape-color': if (el.tagName === 'BUTTON') setTape('color', el.dataset.v); return true;
         case 'card-tape-add': addTape(); return true;
@@ -904,7 +942,11 @@ export function cardClick(act, el) {
         case 'card-save': saveCard(); return true;
         case 'card-download': download(); return true;
         case 'card-stick': stickInChat(); return true;
-        case 'card-sheet-done': ed.sheet = null; ed.card = null; H.state.screen = 'cards'; H.render(); return true;
+        case 'card-sheet-done':
+            if (ed.sheet?.list) { ed.sheet = null; H.render(); return true; }
+            ed.sheet = null; ed.card = null; H.state.screen = 'cards'; H.render(); return true;
+        case 'card-view': viewSaved(el.dataset.id); return true;
+        case 'card-edit': { const id = ed.sheet?.id; ed.sheet = null; if (id) startCard(id); return true; }
         default: return false;
     }
 }

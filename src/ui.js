@@ -697,7 +697,10 @@ async function deleteMySticker(id) {
     const i = list.findIndex(m => m.id === id);
     if (i < 0) return;
     const name = list[i].name || t('stk_mine_n', { n: i + 1 });
-    if (!(await confirmBox(t('confirm_stk_delete', { name }), t('delete')))) return;
+    // 0.12.1: say so when photocards use it (they keep their finished picture).
+    const used = cardsUsing([list[i].path]);
+    const text = t('confirm_stk_delete', { name }) + (used ? ` ${t('confirm_stk_cards', { n: used })}` : '');
+    if (!(await confirmBox(text, t('delete')))) return;
     await withBusy(async () => {
         const path = removeMySticker(id);
         save();

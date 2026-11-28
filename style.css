@@ -2219,3 +2219,6 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 @media (min-width: 601px) { .facets-cb-tpats { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 .facets-cb-tpats .facets-cb-patimg { height: 26px; }
 .facets-cb-area-label { top: calc(100% + 3px); bottom: auto; }
+/* 0.12.1: a saved photocard as its own page */
+.facets-cb-sheet.is-page { max-width: 520px; margin: 0 auto; border-radius: 0; box-shadow: none; background: transparent; padding: 4px 2px 12px; }
+.facets-cb-sheet.is-page .facets-cb-sheetimg { width: 120px; }
