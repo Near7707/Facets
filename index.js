@@ -16,7 +16,7 @@ import { openWardrobe, refreshIfOpen, setVersion, isOpen, requestClose, rerender
 import { onReply } from './src/auto.js';
 import { initStage } from './src/stage.js';
 
-export const VERSION = '0.11.1';
+export const VERSION = '0.11.2';
 setVersion(VERSION);
 
 function themeOptions() {

@@ -10,7 +10,7 @@
 
 import { t } from './i18n.js';
 import {
-    settings, save, stageOf, effectiveOutfit, isCharKey, avatarOfKey, SIZE_MIN, SIZE_MAX, OPACITY_MIN,
+    settings, save, stageOf, effectiveOutfit, isCharKey, avatarOfKey, SIZE_MIN, SIZE_MAX, OPACITY_MIN, STICKER_SIZE_MIN,
     pinsOf, getEntity, removePin, normRot, stickersOf, findSticker, removeSticker, STICKER_KEY,
 } from './store.js';
 import { basicUrl, lookFilter, sparkOverlayUrl } from './stickers.js';
@@ -29,6 +29,7 @@ let gesture = null;
 const pointers = new Map();
 let rotHandle = null;
 let sizeHandle = null; // 0.7.1: corner handle to resize
+let sliding = false; // 0.11.2: the size bar is being dragged
 let holes = []; // cut-out boxes in layer coordinates
 let geo = null; // { L, T, W, H } of the layer in the window
 
@@ -47,6 +48,11 @@ function splitPid(pid) {
 }
 
 const isSticker = (pid) => splitPid(pid).ek === STICKER_KEY;
+// 0.11.2: smallest size (part of the layer height). Stickers go much smaller than outfit pictures.
+const sizeMin = (pid) => (isSticker(pid) ? STICKER_SIZE_MIN : SIZE_MIN);
+// The size bar moves evenly: each step grows the picture by the same ratio (small sizes stay fine-grained).
+const sizeToBar = (pid, size) => Math.round(100 * Math.log(clamp(size, sizeMin(pid), SIZE_MAX) / sizeMin(pid)) / Math.log(SIZE_MAX / sizeMin(pid)));
+const barToSize = (pid, v) => sizeMin(pid) * Math.pow(SIZE_MAX / sizeMin(pid), clamp(v, 0, 100) / 100);
 
 /** Settings of one piece: the entity's stage, the pin or the sticker in the open chat. */
 function stOf(pid) {
@@ -109,7 +115,7 @@ function setPlace(pid, p) {
     st.place[screenKind()] = {
         v: 2,
         x: clamp(p.x, -0.5, 1.5), y: clamp(p.y, -0.5, 1.5),
-        size: clamp(p.size, SIZE_MIN, SIZE_MAX), rot: normRot(p.rot),
+        size: clamp(p.size, sizeMin(pid), SIZE_MAX), rot: normRot(p.rot),
     };
     drawOne(pid);
 }
@@ -218,7 +224,10 @@ function ensureLayer() {
     layer.addEventListener('wheel', onWheel, { passive: false });
     layer.addEventListener('click', onClick);
     layer.addEventListener('input', onInput);
-    layer.addEventListener('change', () => save());
+    layer.addEventListener('change', () => {
+        save();
+        if (sliding) { sliding = false; placeTools(); }
+    });
     layer.addEventListener('contextmenu', (e) => { if (e.target.closest('.facets-fig')) e.preventDefault(); });
     watchSizes();
     return layer;
@@ -535,6 +544,7 @@ function toolsEl() { return layer?.querySelector('.facets-stage-tools'); }
 
 function closeTools() {
     toolsKey = '';
+    sliding = false;
     toolsEl()?.remove();
     rotHandle?.remove();
     rotHandle = null;
@@ -566,7 +576,9 @@ function openTools(key) {
     bar.innerHTML = st.locked
         ? `<button type="button" class="facets-stage-btn" data-stage-act="unlock"><i class="fa-solid fa-lock-open"></i><span>${esc(t('stage_unlock'))}</span></button>
            <button type="button" class="facets-stage-btn" data-stage-act="hide"><i class="fa-solid fa-arrow-right-to-bracket"></i><span>${esc(t('stage_hide'))}</span></button>`
-        : `<label class="facets-stage-op" title="${esc(t('stage_opacity'))}"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
+        : `<label class="facets-stage-op facets-stage-sz" title="${esc(t('stage_size'))}"><i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i>
+             <input type="range" min="0" max="100" step="1" value="${sizeToBar(key, placeNow(key).size)}" data-stage-act="size" aria-label="${esc(t('stage_size'))}"></label>
+           <label class="facets-stage-op" title="${esc(t('stage_opacity'))}"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
              <input type="range" min="${Math.round(OPACITY_MIN * 100)}" max="100" step="1" value="${Math.round(st.opacity * 100)}" data-stage-act="opacity" aria-label="${esc(t('stage_opacity'))}"></label>
            <div class="facets-stage-row2">
              ${ico('rot-left', 'fa-rotate-left', t('stage_rot_left'))}${ico('rot-right', 'fa-rotate-right', t('stage_rot_right'))}
@@ -604,6 +616,8 @@ function syncTools() {
     if (range && document.activeElement !== range) range.value = String(Math.round(rot));
     const label = bar.querySelector('.facets-stage-deg');
     if (label) label.textContent = deg(rot);
+    const size = bar.querySelector('[data-stage-act="size"]');
+    if (size && !sliding) size.value = String(sizeToBar(toolsKey, placeNow(toolsKey).size));
 }
 
 function placeTools() {
@@ -613,6 +627,8 @@ function placeTools() {
     const { W, H } = geo;
     const bw = bar.offsetWidth, bh = bar.offsetHeight;
     const v = f.visible;
+    // 0.11.2: while the size bar is being dragged the tool bar stays put (it moves once the finger lets go).
+    if (sliding) { placeHandles(f, W, H); return; }
     const cx = (v.left + v.right) / 2;
     const left = clamp(cx - bw / 2, 4, Math.max(4, W - bw - 4));
     let top = v.top - bh - 8 - (rotHandle ? 40 : 0);
@@ -625,10 +641,15 @@ function placeTools() {
     bar.style.left = `${left}px`;
     bar.style.top = `${clamp(top, 4, Math.max(4, H - bh - 4))}px`;
     syncTools();
+    placeHandles(f, W, H);
+}
+
+/** Turn and size handles around the open picture. */
+function placeHandles(f, W, H) {
     if (rotHandle && f.center) {
         // Above the top of the picture, turned with it.
         const a = f.center.rot * Math.PI / 180;
-        const d = f.center.h / 2 + 24;
+        const d = Math.max(f.center.h / 2 + 24, 44);
         const x = f.center.x + Math.sin(a) * d, y = f.center.y - Math.cos(a) * d;
         rotHandle.style.left = `${clamp(x - 17, 2, W - 36)}px`;
         rotHandle.style.top = `${clamp(y - 17, 2, H - 36)}px`;
@@ -638,8 +659,12 @@ function placeTools() {
         // On the bottom right corner of the picture, turned with it.
         const c = f.center, a = c.rot * Math.PI / 180;
         const hw = c.w / 2, hh = c.h / 2;
-        let x = c.x + hw * Math.cos(a) - hh * Math.sin(a);
-        let y = c.y + hw * Math.sin(a) + hh * Math.cos(a);
+        let dx = hw * Math.cos(a) - hh * Math.sin(a), dy = hw * Math.sin(a) + hh * Math.cos(a);
+        // 0.11.2: on a tiny picture the handle would cover it; keep it a little way out from the middle.
+        const len = Math.hypot(dx, dy);
+        if (len > 0 && len < 38) { dx *= 38 / len; dy *= 38 / len; }
+        let x = c.x + dx;
+        let y = c.y + dy;
         x = clamp(x, 19, W - 19);
         y = clamp(y, 19, H - 19);
         // Not behind the input bar: sit just above it.
@@ -853,7 +878,10 @@ function onInput(e) {
     const el = e.target;
     const st = stOf(toolsKey);
     if (!st) return;
-    if (el.dataset.stageAct === 'opacity') {
+    if (el.dataset.stageAct === 'size') {
+        sliding = true;
+        setPlace(toolsKey, { ...currentPlace(toolsKey), size: barToSize(toolsKey, Number(el.value)) });
+    } else if (el.dataset.stageAct === 'opacity') {
         st.opacity = clamp(Number(el.value) / 100, OPACITY_MIN, 1);
         const f = figures.get(toolsKey);
         if (f) f.fig.style.opacity = String(st.opacity);

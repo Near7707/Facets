@@ -224,6 +224,8 @@ export function migrate(s) {
 
 export const POSES = ['stand', 'peek', 'pop', 'lean'];
 export const SIZE_MIN = 0.1;
+// 0.11.2: stickers can be much smaller than outfit pictures.
+export const STICKER_SIZE_MIN = 0.04;
 export const SIZE_MAX = 0.95;
 export const OPACITY_MIN = 0.3;
 
@@ -237,20 +239,20 @@ export function normRot(r) {
     return Math.round(x * 10) / 10;
 }
 
-function cleanPlace(p) {
+function cleanPlace(p, min = SIZE_MIN) {
     if (!p || typeof p !== 'object') return undefined;
     const out = p.v === 2
-        ? { v: 2, x: clamp(p.x, -0.5, 1.5, 0.5), y: clamp(p.y, -0.5, 1.5, 0.5), size: clamp(p.size, SIZE_MIN, SIZE_MAX, 0.45) }
+        ? { v: 2, x: clamp(p.x, -0.5, 1.5, 0.5), y: clamp(p.y, -0.5, 1.5, 0.5), size: clamp(p.size, min, SIZE_MAX, 0.45) }
         : { x: clamp(p.x, 0, 1, 0.5), y: clamp(p.y, 0, 1, 0.5), size: clamp(p.size, 0.2, 0.8, 0.45) };
     out.rot = normRot(p.rot);
     return out;
 }
 
-export function cleanStage(st) {
+export function cleanStage(st, min = SIZE_MIN) {
     const s = st && typeof st === 'object' ? st : {};
     const place = {};
     for (const k of ['narrow', 'wide']) {
-        const p = cleanPlace(s.place?.[k]);
+        const p = cleanPlace(s.place?.[k], min);
         if (p) place[k] = p;
     }
     return {
@@ -448,7 +450,7 @@ function cleanSticker(k) {
     if (!k || typeof k !== 'object') return null;
     const kind = k.kind === 'mine' ? 'mine' : 'basic';
     if (typeof k.ref !== 'string' || !k.ref || (kind === 'basic' && !BASIC_IDS.includes(k.ref))) return null;
-    const st = cleanStage(k);
+    const st = cleanStage(k, STICKER_SIZE_MIN);
     delete st.on;
     delete st.pose;
     return {
