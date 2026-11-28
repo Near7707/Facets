@@ -2,6 +2,7 @@
 
 import { cleanDeco, cleanFrame, STICKER_DECO } from './deco.js';
 import { LOOKS, BASIC_IDS, MAX_STICKERS } from './stickers.js';
+import { cleanCard, cleanDraft, cardFiles, cardPaths, MAX_CARDS } from './cards.js';
 
 export const MODULE = 'facets';
 export const FORMAT = 1;
@@ -60,6 +61,10 @@ const DEFAULTS = Object.freeze({
     // Look picked for new stickers (0.10.0)
     stickerLook: 'gloss',
     stickerSpark: true,
+    // 0.11.0: photocards, newest first: Card[] (see cards.js). Pictures are files; only the layout is kept here.
+    cards: [],
+    // The photocard being made (one at a time), kept so closing the window loses nothing: { base, card, uploads }
+    cardDraft: null,
     // Every file path Facets uploaded. Cleanup deletes only these.
     files: [],
 });
@@ -149,6 +154,17 @@ export function migrate(s) {
         if (Array.isArray(list) && list.length && cleaned.has(list)) continue;
         const clean = Array.isArray(list) ? list.map(cleanSticker).filter(Boolean).slice(0, MAX_STICKERS) : [];
         if (clean.length) { s.stickers[ck] = { [STICKER_KEY]: clean }; cleaned.add(clean); } else delete s.stickers[ck];
+    }
+    // Photocards (0.11.0). Cleaned once, then kept as they are (same reason as above).
+    if (!Array.isArray(s.cards)) s.cards = [];
+    if (!cleaned.has(s.cards)) {
+        const seen = new Set();
+        s.cards = s.cards.map(cleanCard).filter(c => c && !seen.has(c.id) && seen.add(c.id)).slice(0, MAX_CARDS);
+        cleaned.add(s.cards);
+    }
+    if (s.cardDraft !== null && !cleaned.has(s.cardDraft)) {
+        s.cardDraft = cleanDraft(s.cardDraft);
+        if (s.cardDraft) cleaned.add(s.cardDraft);
     }
     if (!LOOKS.includes(s.stickerLook)) s.stickerLook = 'gloss';
     if (typeof s.stickerSpark !== 'boolean') s.stickerSpark = true;
@@ -1056,5 +1072,95 @@ export function unusedFiles() {
         for (const o of e.outfits) { if (o.orig) used.add(o.orig); if (o.sq) used.add(o.sq); }
     }
     for (const m of s.myStickers) used.add(m.path); // 0.10.0: your own stickers are not "pictures nobody uses"
+    for (const p of cardFilesInUse()) used.add(p); // 0.11.0: photocards and the one being made
     return s.files.filter(p => p && !used.has(p));
+}
+
+// ---- Photocards (0.11.0) ----
+
+export function cardsOf() { return settings().cards; }
+export function findCard(id) { return settings().cards.find(c => c.id === id) || null; }
+export function cardDraftOf() { return settings().cardDraft; }
+
+/** Files kept for photocards (saved ones and the one being made), optionally leaving one card out. */
+export function cardFilesInUse(skipId = null, withDraft = true) {
+    const s = settings();
+    const used = new Set();
+    for (const c of s.cards) if (c.id !== skipId) for (const p of cardFiles(c)) used.add(p);
+    if (withDraft && s.cardDraft) {
+        for (const p of cardFiles(s.cardDraft.card)) used.add(p);
+        for (const p of s.cardDraft.uploads) used.add(p);
+    }
+    return used;
+}
+
+/** Other things that keep a file alive: outfits and your own stickers. */
+function otherFilesInUse(s) {
+    const used = new Set();
+    for (const e of Object.values(s.entities)) for (const o of e.outfits) { if (o.orig) used.add(o.orig); if (o.sq) used.add(o.sq); }
+    for (const m of s.myStickers) used.add(m.path);
+    return used;
+}
+
+/** Keep the card being made. Pass null to forget it (files are not touched here). */
+export function setCardDraft(d) {
+    const s = settings();
+    s.cardDraft = d ? cleanDraft(d) : null;
+    if (s.cardDraft) cleaned.add(s.cardDraft);
+    save();
+}
+
+/** Throw the draft away. Returns its files that nothing else uses (for the caller to delete). */
+export function dropCardDraft() {
+    const s = settings();
+    const d = s.cardDraft;
+    if (!d) return [];
+    s.cardDraft = null;
+    const keep = cardFilesInUse(null, false);
+    const other = otherFilesInUse(s);
+    save();
+    return [...new Set([...cardFiles(d.card), ...d.uploads])].filter(p => !keep.has(p) && !other.has(p));
+}
+
+/**
+ * Save the draft as a card (replacing its old version), then forget the draft.
+ * Returns { card, gone }: gone = files of the old version / the draft that the new card no longer uses.
+ */
+export function commitCardDraft(out) {
+    const s = settings();
+    const d = s.cardDraft;
+    if (!d) return null;
+    const old = d.base ? s.cards.find(c => c.id === d.base) : null;
+    const card = cleanCard({ ...d.card, id: old ? old.id : d.card.id, out, t: Date.now() });
+    const list = old ? s.cards.map(c => (c.id === old.id ? card : c)) : [card, ...s.cards];
+    s.cards = list.slice(0, MAX_CARDS);
+    cleaned.add(s.cards);
+    s.cardDraft = null;
+    const keep = cardFilesInUse(null, false);
+    const other = otherFilesInUse(s);
+    const before = new Set([...(old ? cardFiles(old) : []), ...cardFiles(d.card), ...d.uploads]);
+    save();
+    return { card, gone: [...before].filter(p => p !== out && !keep.has(p) && !other.has(p)) };
+}
+
+/** Delete a saved card. Returns its files that nothing else uses. */
+export function removeCard(id) {
+    const s = settings();
+    const c = s.cards.find(x => x.id === id);
+    if (!c) return [];
+    s.cards = s.cards.filter(x => x.id !== id);
+    cleaned.add(s.cards);
+    const keep = cardFilesInUse();
+    const other = otherFilesInUse(s);
+    save();
+    return cardFiles(c).filter(p => !keep.has(p) && !other.has(p));
+}
+
+/** How many photocards (the draft counts as one) draw any of these pictures. */
+export function cardsUsing(paths) {
+    const want = new Set(paths.filter(Boolean));
+    if (!want.size) return 0;
+    const s = settings();
+    const list = [...s.cards, ...(s.cardDraft ? [s.cardDraft.card] : [])];
+    return list.filter(c => cardPaths(c).some(p => want.has(p))).length;
 }

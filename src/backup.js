@@ -3,6 +3,7 @@
 import { t } from './i18n.js';
 import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx, CHAT_TABLES as STORE_TABLES } from './store.js';
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
+import { cardFiles, CARD_FOLDER } from './cards.js';
 
 const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'theme', 'stickerLook', 'stickerSpark'];
 // Every table keyed by chat (the same list the store moves on renames), plus branch marks.
@@ -17,6 +18,8 @@ export async function exportBackup(toast) {
         prefs: Object.fromEntries(PREF_KEYS.map(k => [k, s[k]])),
         entities: structuredClone(s.entities),
         myStickers: structuredClone(s.myStickers || []), // 0.10.0
+        cards: structuredClone(s.cards || []), // 0.11.0
+        cardDraft: structuredClone(s.cardDraft || null),
         ...Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(s[k] || {})])),
         images: null,
     };
@@ -35,6 +38,13 @@ export async function exportBackup(toast) {
         for (const m of s.myStickers || []) {
             if (!m.path || out.images[m.path]) continue;
             try { out.images[m.path] = await fetchAsDataURL(m.path); } catch { failed++; }
+        }
+        // 0.11.0: photocard files (finished pictures, backgrounds, pictures uploaded for a card).
+        for (const c of [...(s.cards || []), ...(s.cardDraft ? [s.cardDraft.card] : [])]) {
+            for (const p of cardFiles(c)) {
+                if (!p || out.images[p]) continue;
+                try { out.images[p] = await fetchAsDataURL(p); } catch { failed++; }
+            }
         }
         if (failed) toast?.('warning', t('backup_img_failed', { n: failed }));
     }
@@ -69,6 +79,9 @@ export async function importBackup(file, toast) {
     const tables = Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(data[k] || {})]));
     // 0.10.0: your own stickers. Older backups have none; then the ones you have stay.
     const myStickers = Array.isArray(data.myStickers) ? structuredClone(data.myStickers) : null;
+    // 0.11.0: photocards. Older backups have none; then the ones you have stay.
+    const cards = Array.isArray(data.cards) ? structuredClone(data.cards) : null;
+    const cardDraft = cards ? structuredClone(data.cardDraft || null) : undefined;
     if (data.images && typeof data.images === 'object') {
         const moved = new Map();
         let failed = 0;
@@ -100,12 +113,38 @@ export async function importBackup(file, toast) {
                 m.path = np;
             } catch { failed++; }
         }
+        // Photocards: their own files go back into the card folder; pictures they borrow from outfits
+        // or stickers follow those (already moved above).
+        const cardSets = [...(cards || []), ...(cardDraft?.card ? [cardDraft.card] : [])];
+        const own = new Set(cardSets.flatMap(c => cardFiles(c)));
+        const remap = async (p) => {
+            if (!p) return p;
+            if (moved.has(p)) return moved.get(p);
+            const img = own.has(p) && data.images[p];
+            if (!img) return p;
+            try {
+                const stem = String(p).split('/').pop().replace(/\.[^.]+$/, '');
+                const np = await uploadDataURL(img, CARD_FOLDER, stem);
+                moved.set(p, np);
+                return np;
+            } catch { failed++; return p; }
+        };
+        for (const c of cardSets) {
+            if (!c || typeof c !== 'object') continue;
+            c.out = await remap(c.out);
+            if (c.bg && typeof c.bg === 'object') c.bg.path = await remap(c.bg.path);
+            for (const it of Array.isArray(c.items) ? c.items : []) if (it && typeof it.src === 'string') it.src = await remap(it.src);
+        }
+        if (cardDraft && Array.isArray(cardDraft.uploads)) {
+            cardDraft.uploads = cardDraft.uploads.map(p => moved.get(p) || p);
+        }
         if (failed) toast?.('warning', t('backup_img_failed', { n: failed }));
     }
     const files = s.files; // keep the full list so cleanup can still find older uploads
     s.entities = entities;
     for (const k of CHAT_TABLES) s[k] = tables[k];
     if (myStickers) s.myStickers = myStickers;
+    if (cards) { s.cards = cards; s.cardDraft = cardDraft; }
     for (const k of PREF_KEYS) {
         const v = data.prefs?.[k];
         if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (['ignoreWords', 'theme', 'stickerLook'].includes(k) && typeof v === 'string')) s[k] = v;

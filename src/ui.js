@@ -27,6 +27,7 @@ import { currentScene, personaName, applyAllSoon, currentPersonaAvatar, tellStat
 import { exportBackup, importBackup, cleanupAll } from './backup.js';
 import { syncTheme } from './theme.js';
 import { startViewport, stopViewport } from './viewport.js';
+import { setCardHelpers, viewCards, viewCard, mountCard, cardBack, cardClick, cardChange, cardInput, openCards, cardsUsing } from './cardui.js';
 
 let VERSION = '';
 export function setVersion(v) { VERSION = v; }
@@ -34,7 +35,7 @@ export function setVersion(v) { VERSION = v; }
 const state = {
     open: false,
     screen: 'wardrobe', // wardrobe | organize | edit | crop | settings | pair | drawers | history | leftovers | move
-    //                     Photo Booth (0.8.0): booth | room | border | frame
+    //                     Photo Booth (0.8.0): booth | room | border | frame | cards | card (0.11.0)
     tab: 'char',
     drawer: '', // drawer tab shown in the wardrobe ('' = all)
     fromSettings: false,
@@ -56,7 +57,7 @@ const state = {
     dark: true, // 0.9.0: SillyTavern's theme is dark (Facets' own look follows it)
 };
 
-const BOOTH_SCREENS = new Set(['booth', 'room', 'border', 'frame']);
+const BOOTH_SCREENS = new Set(['booth', 'room', 'border', 'frame', 'cards', 'card']);
 
 const HISTORY_PAGE = 50;
 
@@ -240,6 +241,7 @@ function ensureRoot() {
 
 function back() {
     if (root.querySelector('.facets-full')) { root.querySelector('.facets-full').remove(); return; }
+    if (cardBack()) { render(); return; }
     switch (state.screen) {
         case 'edit': state.screen = 'organize'; state.draft = null; break;
         case 'crop':
@@ -282,6 +284,8 @@ function render() {
         case 'room': [head, body, foot] = viewRoom(); break;
         case 'border': [head, body, foot] = viewBorder(); break;
         case 'frame': [head, body, foot] = viewFrame(); break;
+        case 'cards': [head, body, foot] = viewCards(); break;
+        case 'card': [head, body, foot] = viewCard(); break;
     }
     const booth = BOOTH_SCREENS.has(state.screen);
     // 0.9.2: one theme for every screen, the Photo Booth too. 'st' = SillyTavern colours.
@@ -290,7 +294,7 @@ function render() {
     const lang = getLanguage();
     root.innerHTML = `
       <div class="facets-backdrop" data-act="close"></div>
-      <div class="facets-sheet${booth ? ' facets-booth' : ''}${look}" role="dialog" aria-modal="true" aria-label="${esc(t('ext_name'))}" lang="${lang}">
+      <div class="facets-sheet${booth ? ' facets-booth' : ''}${state.screen === 'card' ? ' facets-cardsheet' : ''}${look}" role="dialog" aria-modal="true" aria-label="${esc(t('ext_name'))}" lang="${lang}">
         <div class="facets-head">${head}
           <button type="button" class="facets-iconbtn facets-close" data-act="close" title="${esc(t('close'))}" aria-label="${esc(t('close'))}"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -304,6 +308,7 @@ function render() {
     }
     if (state.screen === 'crop') mountCrop();
     if (state.screen === 'border') mountBorderPreview();
+    if (state.screen === 'card') mountCard();
     if (state.busy) root.querySelector('.facets-sheet')?.classList.add('facets-busy');
 }
 
@@ -505,11 +510,11 @@ function viewBooth() {
         tile('room', 'wand', 'booth_room', 'pink'),
         tile('frame', 'portrait', 'booth_frame', 'lav'),
         tile('stickers', 'heart', 'booth_stickers', 'cherry'),
-        tile('', 'card', 'booth_card', 'sky'),
+        tile('cards', 'card', 'booth_card', 'sky'),
         tile('', 'film', 'booth_strip', 'gold'),
         tile('', 'book', 'booth_book', 'silver'),
     ];
-    const body = `<div class="facets-booth-strip">${kicker(t('booth_label'))}<span class="facets-count">${esc(t('booth_count', { open: 3, soon: 3 }))}</span></div>
+    const body = `<div class="facets-booth-strip">${kicker(t('booth_label'))}<span class="facets-count">${esc(t('booth_count', { open: 4, soon: 2 }))}</span></div>
       <div class="facets-btiles">${tiles.join('')}</div>`;
     return [`${headSwitch('booth')}${settingsButton()}`, body, ''];
 }
@@ -2015,7 +2020,10 @@ async function deleteOutfit(id = state.editId) {
     const o = findOutfit(key, id);
     if (!o || !e) return;
     const name = outfitLabel(o, e.outfits.indexOf(o));
-    if (!(await confirmBox(t('confirm_delete_outfit', { name }), t('delete')))) return;
+    // 0.11.0: say so when photocards draw this picture (they keep their finished picture).
+    const used = cardsUsing([o.orig]);
+    const text = t('confirm_delete_outfit', { name }) + (used ? ` ${t('confirm_outfit_cards', { n: used })}` : '');
+    if (!(await confirmBox(text, t('delete')))) return;
     await withBusy(async () => {
         const files = [o.orig, o.sq].filter(Boolean);
         forgetOutfit(key, o.id);
@@ -2050,6 +2058,7 @@ function onClick(e) {
     const act = el.dataset.act;
     if (el.tagName === 'SELECT' || el.tagName === 'INPUT') return;
     if (state.busy && act !== 'full-close') { toast('info', t('busy')); return; }
+    if (act.startsWith('card-') && cardClick(act, el)) return;
     switch (act) {
         case 'close': requestClose(); break;
         case 'back': back(); break;
@@ -2107,6 +2116,7 @@ function onClick(e) {
                 state.roomTab = el.dataset.to === 'stickers' ? 'stickers' : 'outfits';
                 state.stickerEdit = false;
             }
+            if (el.dataset.to === 'cards') { openCards(); break; }
             state.screen = el.dataset.to === 'frame' ? 'frame' : 'room';
             render(); break;
         case 'stage-on-btn': case 'stage-off': {
@@ -2307,6 +2317,7 @@ function onChange(e) {
         return;
     }
     if (act === 'deco-color' && el.type === 'color') { setDeco({ color: el.value }); return; }
+    if (act?.startsWith('card-') && cardChange(act, el)) return;
     if (act === 'stk-spark') { settings().stickerSpark = el.checked; save(); render(); return; }
     if (act === 'stk-piece-spark') { setStickerLook({ spark: el.checked }); return; }
     if (act === 'stk-upload') { const f = el.files; uploadStickers(f).finally(() => { el.value = ''; }); return; }
@@ -2381,6 +2392,7 @@ function onChange(e) {
 
 function onInput(e) {
     const el = e.target;
+    if (el.dataset.act?.startsWith('card-') && cardInput(el.dataset.act, el)) return;
     if (el.dataset.field && state.draft) state.draft[el.dataset.field] = el.value;
     if (el.dataset.act === 'zoom' && state.crop) setScale(rangeToScale(Number(el.value)));
     if (el.dataset.act === 'deco-zoom') {
@@ -2403,6 +2415,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 attachCropGestures();
+// 0.11.0: the photocard screens live in cardui.js and use these helpers.
+setCardHelpers({
+    esc, toast, render, kicker, headTitle, settingsButton, whoPicker, activeKey, chatAvailable, currentScene,
+    withBusy, confirmBox, readPicked, root: () => root, state,
+});
 document.addEventListener('facets:stage', () => { if (state.open && !state.busy && ['room', 'border'].includes(state.screen)) render(); });
 
 export function _stateForTest() { return state; }
