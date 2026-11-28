@@ -169,6 +169,7 @@ async function viewSaved(id) {
         cv.height = img.naturalHeight;
         cv.getContext('2d').drawImage(img, 0, 0);
         ed.sheet = { url: urlOf(c.out), canvas: cv, id, stuck: false, pad: cv.width > CARD_W ? CARD_PAD : 0, over: false, list: true };
+        prepBlob(ed.sheet);
         ok = true;
     }, () => {});
     if (!ok) { startCard(id); return; }
@@ -546,13 +547,18 @@ async function uploadForCard(files, max = CARD_PIC_MAX) {
     for (const it of items) {
         let data = it.data;
         const w = it.img.naturalWidth || 1, h = it.img.naturalHeight || 1;
+        // 0.12.2: camera photos (JPG / HEIC) have no see-through parts, so they go up as JPG — as PNG
+        // (iPhone Safari can't make webp) one photo was several MB and slow to upload.
+        const photo = /^data:image\/(jpe?g|hei[cf])/i.test(data) || /\.(jpe?g|hei[cf])$/i.test(it.fileName || it.name || '');
         if (Math.max(w, h) > max || !/^data:image\/(png|webp|jpe?g|gif)/i.test(data)) {
             const c = document.createElement('canvas');
             const k = Math.min(1, max / Math.max(w, h));
             c.width = Math.max(1, Math.round(w * k));
             c.height = Math.max(1, Math.round(h * k));
-            c.getContext('2d').drawImage(it.img, 0, 0, c.width, c.height);
-            data = canvasData(c);
+            const g = c.getContext('2d');
+            g.imageSmoothingQuality = 'high';
+            g.drawImage(it.img, 0, 0, c.width, c.height);
+            data = photo ? c.toDataURL('image/jpeg', 0.9) : canvasData(c);
         }
         try {
             const path = await uploadDataURL(data, CARD_FOLDER, `cp_${newId()}`);
@@ -678,6 +684,7 @@ async function saveCard() {
         save();
         if (missing) H.toast('warning', t('card_missing_saved', { n: missing }));
         ed.sheet = { url: urlOf(path), canvas, id: res.card.id, stuck: false, pad, over: cardOverflow(ed.card) };
+        prepBlob(ed.sheet);
         ed.base = res.card.id;
         ed.sel = null;
         ok = true;
@@ -686,19 +693,46 @@ async function saveCard() {
     H.render();
 }
 
+/** 0.12.2: iPhone / iPad (also iPads that call themselves a Mac). */
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+/**
+ * Make the PNG ahead of time, so on an iPhone the share sheet can open right on the tap
+ * (Safari only allows it straight after a tap, and making the PNG takes a moment).
+ */
+function prepBlob(sh) {
+    if (!IOS || !sh?.canvas || !navigator.canShare) return;
+    sh.canvas.toBlob((blob) => { if (blob) sh.blob = blob; }, 'image/png');
+}
+
+function saveBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
 function download() {
     const sh = ed.sheet;
     if (!sh?.canvas) return;
     const name = `${cardName(sh.id).replace(/\s+/g, '-')}.png`;
+    // 0.12.2: on an iPhone, open the share sheet ("Save Image" puts it in Photos). Anything else: a normal download.
+    if (IOS && sh.blob && navigator.canShare) {
+        const file = new File([sh.blob], name, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file] }).catch((err) => {
+                if (err?.name !== 'AbortError') saveBlob(sh.blob, name); // closing the sheet is not an error
+            });
+            return;
+        }
+    }
     sh.canvas.toBlob((blob) => {
         if (!blob) { H.toast('error', t('card_save_failed')); return; }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        saveBlob(blob, name);
     }, 'image/png');
 }
 

@@ -2121,6 +2121,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
     background: color-mix(in srgb, var(--facets-bg) 96%, var(--facets-text) 4%); color: var(--facets-text); border: 1px solid var(--facets-border); box-shadow: 0 6px 16px rgba(20, 10, 40, .24); }
 .facets-cb-bench.is-moving .facets-cb-tools { visibility: hidden; }
 .facets-cb-op { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--facets-muted); padding: 0 2px; }
+.facets-cb-op > span { white-space: nowrap; flex: none; } /* 0.12.2: "투명도" stayed on two lines on iPhone */
 .facets-cb-op input[type="range"] { width: 120px; accent-color: var(--facets-accent); }
 .facets-cb-trow { display: flex; align-items: center; gap: 2px; }
 .facets-cb-tbtn { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: transparent; display: grid; place-items: center;
