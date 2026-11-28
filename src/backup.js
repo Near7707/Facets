@@ -65,7 +65,7 @@ export async function exportBackup(toast) {
 export async function importBackup(file, toast) {
     let data;
     try { data = JSON.parse(await file.text()); } catch { data = null; }
-    if (!data || data.app !== 'Facets' || typeof data.entities !== 'object') {
+    if (!data || data.app !== 'Facets' || !data.entities || typeof data.entities !== 'object' || Array.isArray(data.entities)) {
         toast?.('error', t('import_bad'));
         return false;
     }
@@ -73,10 +73,22 @@ export async function importBackup(file, toast) {
         toast?.('error', t('import_newer'));
         return false;
     }
+    // 0.12.2: check the whole backup first, before any picture is uploaded or anything is changed.
+    // Broken entries are dropped here; if it can't be read at all, nothing is touched.
+    let entities;
+    try {
+        entities = migrate(structuredClone({ entities: data.entities })).entities;
+    } catch (err) {
+        console.error('[Facets] import check', err);
+        toast?.('error', t('import_bad'));
+        return false;
+    }
     toast?.('info', t('importing'));
     const s = settings();
-    const entities = structuredClone(data.entities);
-    const tables = Object.fromEntries(CHAT_TABLES.map(k => [k, structuredClone(data[k] || {})]));
+    const tables = Object.fromEntries(CHAT_TABLES.map(k => {
+        const v = data[k];
+        return [k, v && typeof v === 'object' && !Array.isArray(v) ? structuredClone(v) : {}];
+    }));
     // 0.10.0: your own stickers. Older backups have none; then the ones you have stay.
     const myStickers = Array.isArray(data.myStickers) ? structuredClone(data.myStickers) : null;
     // 0.11.0: photocards. Older backups have none; then the ones you have stay.
@@ -141,19 +153,28 @@ export async function importBackup(file, toast) {
         if (failed) toast?.('warning', t('backup_img_failed', { n: failed }));
     }
     const files = s.files; // keep the full list so cleanup can still find older uploads
-    s.entities = entities;
-    for (const k of CHAT_TABLES) s[k] = tables[k];
-    if (myStickers) s.myStickers = myStickers;
-    if (cards) { s.cards = cards; s.cardDraft = cardDraft; }
-    for (const k of PREF_KEYS) {
-        const v = data.prefs?.[k];
-        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (['ignoreWords', 'theme', 'stickerLook'].includes(k) && typeof v === 'string')
-            || (k === 'tapeLook' && v && typeof v === 'object')) s[k] = v; // tapeLook is cleaned by migrate
+    const before = { ...s }; // 0.12.2: put everything back if applying fails half-way
+    try {
+        s.entities = entities;
+        for (const k of CHAT_TABLES) s[k] = tables[k];
+        if (myStickers) s.myStickers = myStickers;
+        if (cards) { s.cards = cards; s.cardDraft = cardDraft; }
+        for (const k of PREF_KEYS) {
+            const v = data.prefs?.[k];
+            if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (['ignoreWords', 'theme', 'stickerLook'].includes(k) && typeof v === 'string')
+                || (k === 'tapeLook' && v && typeof v === 'object')) s[k] = v; // tapeLook is cleaned by migrate
+        }
+        // 0.9.0-0.9.1 backups have followTheme instead of theme.
+        if (typeof data.prefs?.theme !== 'string' && typeof data.prefs?.followTheme === 'boolean') s.theme = data.prefs.followTheme ? 'st' : 'holo';
+        s.files = files;
+        migrate(s);
+    } catch (err) {
+        console.error('[Facets] import', err);
+        for (const k of Object.keys(s)) if (!(k in before)) delete s[k];
+        Object.assign(s, before);
+        toast?.('error', t('import_bad'));
+        return false;
     }
-    // 0.9.0-0.9.1 backups have followTheme instead of theme.
-    if (typeof data.prefs?.theme !== 'string' && typeof data.prefs?.followTheme === 'boolean') s.theme = data.prefs.followTheme ? 'st' : 'holo';
-    s.files = files;
-    migrate(s);
     save();
     toast?.('success', t('import_done'));
     return true;

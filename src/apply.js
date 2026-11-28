@@ -403,7 +403,9 @@ function repliesSince(since, skipLast) {
     for (let i = 0; i < end; i++) {
         const m = chat[i];
         if (!m || m.is_user || m.is_system) continue;
-        if (messageTime(m) > since) n++;
+        // 0.12.2: a reply with no time (very old chats) is not one that came after the change.
+        const tm = messageTime(m);
+        if (Number.isFinite(tm) && tm > since) n++;
     }
     return n;
 }

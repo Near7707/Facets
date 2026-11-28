@@ -11,7 +11,7 @@ import {
     CARD_W, CARD_H, MAX_CARD_PICS, MAX_CARD_STICKERS, CARD_FOLDER, CARD_PIC_MAX, CARD_PATS, CARD_FIXED, CARD_COLORS,
     ITEM_W_MIN, ITEM_W_MAX, OPACITY_MIN, cleanCard, newCard, bgUrl, patSample, itemSrc, renderCard, canvasData,
     normRot, CARD_PAD, TAPE_PATS, TAPE_FIXED, TAPE_COLORS, TAPE_BANDS, TAPE_LEN_MIN, FRAME_WIDTHS, FRAME_COLORS, FRAME_RADII,
-    cleanTapeLook, tapeSample, tapeSize, frameUrl, frameRadius, itemReach, cardOverflow, cardPad,
+    cleanTapeLook, tapeSample, tapeSize, frameUrl, frameRadius, itemReach, cardOverflow, cardPad, MAX_CARDS,
 } from './cards.js';
 import { BASIC_IDS, LOOKS, MAX_STICKERS, basicUrl } from './stickers.js';
 import { urlOf, uploadDataURL, deletePath, loadImage } from './images.js';
@@ -661,6 +661,11 @@ function moveLayer(dir) {
 
 async function saveCard() {
     if (!ed.card) return;
+    // 0.12.2: a new card when the list is full would push the oldest one out without a word.
+    if (!(ed.base && findCard(ed.base)) && cardsOf().length >= MAX_CARDS) {
+        H.toast('warning', t('card_full', { n: MAX_CARDS }));
+        return;
+    }
     let ok = false;
     await H.withBusy(async () => {
         persist();

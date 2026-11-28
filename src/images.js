@@ -10,12 +10,14 @@ const OK_FORMATS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
 export function urlOf(path) {
     if (!path) return '';
     if (/^(data:|blob:|https?:)/.test(path)) return path;
-    return '/' + String(path).replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+    // SillyTavern hands back "#" and "?" already as %23 / %3F (0.12.2: don't encode them twice).
+    return '/' + String(path).replace(/^\/+/, '').split('/')
+        .map(seg => encodeURIComponent(seg.replace(/%23/gi, '#').replace(/%3F/gi, '?'))).join('/');
 }
 
 export function folderFor(entityKey) {
     const [kind, avatar] = [entityKey.slice(0, entityKey.indexOf(':')), entityKey.slice(entityKey.indexOf(':') + 1)];
-    const stem = avatar.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'unnamed';
+    const stem = avatar.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|#%]/g, '_').slice(0, 60) || 'unnamed';
     return kind === 'persona' ? `Facets_persona_${stem}` : `Facets_${stem}`;
 }
 
@@ -75,9 +77,20 @@ export async function uploadDataURL(dataURL, folder, filename) {
     return path;
 }
 
+/**
+ * 0.12.2: whether a stored path is one of Facets' own files (user/images/Facets_…/file).
+ * Facets never asks to delete anything else, even if a (broken or edited) backup points there.
+ */
+export function isOwnPath(path) {
+    const n = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (n.split('/').some(seg => seg === '..' || seg === '.' || /^%2e%2e$/i.test(seg))) return false;
+    return /^user\/images\/Facets_[^/]+\/[^/]+$/.test(n);
+}
+
 /** Delete a file Facets uploaded. Returns true when it is gone. */
 export async function deletePath(path) {
     if (!path) return true;
+    if (!isOwnPath(path)) { dropFile(path); return true; } // not ours: forget it, leave the file alone
     try {
         const res = await fetch('/api/images/delete', {
             method: 'POST',

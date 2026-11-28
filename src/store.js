@@ -111,6 +111,10 @@ export function migrate(s) {
     for (const k of ['chats', 'timelines', 'tells', 'branchDone', 'randoms', 'pins', 'pinMemo', 'frames', 'stickers']) {
         if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
     }
+    // 0.12.2: a chat row that isn't a table (damaged backup) would stop renames and deletes.
+    for (const k of ['chats', 'timelines', 'tells', 'randoms']) {
+        for (const [ck, row] of Object.entries(s[k])) if (!row || typeof row !== 'object' || Array.isArray(row)) delete s[k][ck];
+    }
     for (const [ck, row] of Object.entries(s.pins)) {
         if (!row || typeof row !== 'object') { delete s.pins[ck]; continue; }
         for (const [ek, list] of Object.entries(row)) {
@@ -183,8 +187,15 @@ export function migrate(s) {
             if (tl.base === undefined) tl.base = null;
         }
     }
+    // 0.12.2: a broken entry (from a damaged backup) is dropped instead of stopping everything.
+    if (!s.entities || typeof s.entities !== 'object' || Array.isArray(s.entities)) s.entities = {};
+    for (const [k, e] of Object.entries(s.entities)) {
+        if (!e || typeof e !== 'object' || Array.isArray(e)) delete s.entities[k];
+    }
     for (const e of Object.values(s.entities)) {
         if (!Array.isArray(e.outfits)) e.outfits = [];
+        const badOutfit = (o) => !o || typeof o !== 'object' || typeof o.id !== 'string' || !o.id;
+        if (e.outfits.some(badOutfit)) e.outfits = e.outfits.filter(o => !badOutfit(o));
         if (e.global === undefined) e.global = null;
         if (!Array.isArray(e.drawers)) e.drawers = [];
         e.drawers = e.drawers.filter(d => d && typeof d.id === 'string');
@@ -211,11 +222,22 @@ export function migrate(s) {
             if (typeof o.desc !== 'string') o.desc = '';
             if (typeof o.name !== 'string') o.name = '';
             if (typeof o.kw !== 'string') o.kw = '';
+            for (const f of ['orig', 'sq']) if (o[f] !== undefined && typeof o[f] !== 'string') o[f] = '';
+            if (o.crop !== undefined && o.crop !== null) fixCrop(o);
             if (!Array.isArray(o.drawers)) o.drawers = [];
             o.drawers = [...new Set(o.drawers.filter(id => drawerIds.has(id)))];
         }
     }
     return s;
+}
+
+/** 0.12.2: crop numbers must be numbers (they go into the page as they are). */
+function fixCrop(o) {
+    const c = o.crop;
+    if (typeof c !== 'object' || Array.isArray(c)) { o.crop = null; return; }
+    const num = (v, lo, hi, d) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+    const ok = { scale: num(c.scale, 0.01, 1000, 1), x: num(c.x, -100, 100, 0), y: num(c.y, -100, 100, 0), aspect: num(c.aspect, 0.1, 10, 1) };
+    for (const [k, v] of Object.entries(ok)) if (c[k] !== v) c[k] = v;
 }
 
 // ---- "In the chat" pictures (0.6.0, free placement 0.7.0) ----
@@ -856,10 +878,15 @@ export function tellOf(chatKey, entityKey) {
  * A branch (or checkpoint) chat starts with its parent's picks, history and tells. Done once per chat.
  * @returns {boolean} true if something was copied
  */
+// 0.12.2: the last branch set up in this session. Renaming a chat makes SillyTavern open it under the
+// new name *before* it says the chat was renamed, so a renamed branch first looks like a new branch.
+let justBranched = null;
+
 export function setupBranch(chatKey, parentKey) {
     const s = settings();
     if (!chatKey || !parentKey || chatKey === parentKey || s.branchDone[chatKey]) return false;
     s.branchDone[chatKey] = parentKey;
+    justBranched = { key: chatKey, t: Date.now() };
     let copied = false;
     for (const table of CHAT_TABLES) {
         if (s[table][parentKey] && !s[table][chatKey]) {
@@ -968,12 +995,31 @@ export function onCharacterRenamed(oldAvatar, newAvatar) {
     save();
 }
 
+/**
+ * The chat name SillyTavern really saves: its server drops characters a file name can't have
+ * (sanitize-filename), but the rename signal still carries the name as typed.
+ */
+export function savedChatName(name) {
+    // The server cleans "<name>.jsonl" as one file name, then keeps the part before the extension.
+    let n = String(name || '').replace(/\.jsonl$/i, '') + '.jsonl';
+    n = n.replace(/[\/?<>\\:*|"]/g, '').replace(/[\x00-\x1f\x80-\x9f]/g, '');
+    if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(n)) return '';
+    return n.replace(/[. ]+$/, '').replace(/\.jsonl$/i, '');
+}
+
 export function onChatRenamed(avatar, oldFile, newFile) {
-    const strip = (f) => String(f || '').replace(/\.jsonl$/i, '');
-    const oldKey = chatKeyFor(avatar, strip(oldFile));
-    const newKey = chatKeyFor(avatar, strip(newFile));
+    const oldKey = chatKeyFor(avatar, savedChatName(oldFile));
+    const newKey = chatKeyFor(avatar, savedChatName(newFile));
     const s = settings();
-    if (!oldKey || !newKey) return;
+    if (!oldKey || !newKey || oldKey === newKey) return;
+    // A renamed branch was just opened under its new name and given a fresh copy of its parent:
+    // that copy is not the branch's own, so the branch's real data (under the old name) wins.
+    const fresh = justBranched?.key === newKey && Date.now() - justBranched.t < 120000;
+    const hasOld = [...CHAT_TABLES, 'branchDone'].some(table => s[table][oldKey] !== undefined);
+    if (fresh && hasOld) {
+        for (const table of [...CHAT_TABLES, 'branchDone']) delete s[table][newKey];
+        justBranched = null;
+    }
     // If something is already stored under the new name we can't tell which is right: keep both as they are.
     if (s.chats[newKey] || s.timelines[newKey]) return;
     let moved = false;
@@ -1081,6 +1127,8 @@ export function unusedFiles() {
     }
     for (const m of s.myStickers) used.add(m.path); // 0.10.0: your own stickers are not "pictures nobody uses"
     for (const p of cardFilesInUse()) used.add(p); // 0.11.0: photocards and the one being made
+    // 0.12.2: and pictures a photocard borrows (an old outfit picture kept for a card after [Change picture])
+    for (const c of [...s.cards, ...(s.cardDraft ? [s.cardDraft.card] : [])]) for (const p of cardPaths(c)) used.add(p);
     return s.files.filter(p => p && !used.has(p));
 }
 
@@ -1139,6 +1187,7 @@ export function commitCardDraft(out) {
     const d = s.cardDraft;
     if (!d) return null;
     const old = d.base ? s.cards.find(c => c.id === d.base) : null;
+    if (!old && s.cards.length >= MAX_CARDS) return null; // 0.12.2: never push an old card out
     const card = cleanCard({ ...d.card, id: old ? old.id : d.card.id, out, t: Date.now() });
     const list = old ? s.cards.map(c => (c.id === old.id ? card : c)) : [card, ...s.cards];
     s.cards = list.slice(0, MAX_CARDS);

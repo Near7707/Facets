@@ -960,9 +960,10 @@ html.facets-open body { overscroll-behavior: none; }
 @keyframes facets-holo { to { background-position: 200% 200%; } }
 @media (prefers-reduced-motion: reduce) {
     .facets-fig-spark span, .facets-fig-back.is-holo,
-    #chat .mes .avatar::before, #chat .mes .avatar::after,
-    #chat .mes .mesAvatarWrapper::before, #chat .mes .mesAvatarWrapper::after,
-    #chat .mes::before, #chat .mes::after,
+    /* 0.12.2: only where Facets put an avatar deco, so other extensions' and themes' animations stay */
+    #chat .mes .avatar:has(img[data-facets-frame])::before, #chat .mes .avatar:has(img[data-facets-frame])::after,
+    #chat .mes .mesAvatarWrapper:has(img[data-facets-frame])::before, #chat .mes .mesAvatarWrapper:has(img[data-facets-frame])::after,
+    #chat .mes:has(img[data-facets-frame])::before, #chat .mes:has(img[data-facets-frame])::after,
     .facets-booth .facets-fav::before, .facets-booth .facets-fav::after { animation: none !important; }
 }
 

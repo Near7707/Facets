@@ -1830,7 +1830,8 @@ async function applyCrop() {
             Object.assign(o, { orig, sq, crop: { ...c.crop } });
             save();
             let failed = false;
-            for (const p of old) if (p && !(await deletePath(p))) failed = true;
+            // 0.12.2: a picture a photocard still uses stays (the card can still be edited and saved again).
+            for (const p of old) if (p && !cardsUsing([p]) && !(await deletePath(p))) failed = true;
             save();
             if (failed) toast('warning', t('delete_failed'));
             state.crop = null;

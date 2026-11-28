@@ -115,6 +115,19 @@
             await eventSource.emit(eventTypes.MESSAGE_SWIPED, i);
         },
         async openChat(name) { characters[state.characterId].chat = name; renderChat(); await eventSource.emit(eventTypes.CHAT_CHANGED, name); },
+        /**
+         * Like SillyTavern's chat rename: the server drops characters a file name can't have, the chat is
+         * opened again under the new name, and only then chat_renamed comes — with the name as typed.
+         */
+        async renameChat(typed) {
+            const c = characters[state.characterId]; const old = c.chat;
+            const saved = typed.replace(/[\/?<>\\:*|"]/g, '');
+            chats[saved] = messagesOf(old); metas[saved] = metas[old] || {};
+            delete chats[old]; delete metas[old];
+            c.chat = saved; renderChat();
+            await eventSource.emit(eventTypes.CHAT_CHANGED, saved);
+            await eventSource.emit(eventTypes.CHAT_RENAMED, { avatarId: c.avatar, groupId: null, oldFileName: old + '.jsonl', newFileName: typed + '.jsonl' });
+        },
     };
 
     window.__facetsBoot = (async () => {
@@ -144,8 +157,7 @@
             renderList(); renderChat(); await eventSource.emit(eventTypes.CHARACTER_RENAMED, old, c.avatar);
         };
         document.getElementById('btn_rename_chat').onclick = async () => {
-            const c = characters[state.characterId]; const old = c.chat; c.chat = old + ' (renamed)';
-            renderChat(); await eventSource.emit(eventTypes.CHAT_RENAMED, { avatarId: c.avatar, groupId: null, oldFileName: old + '.jsonl', newFileName: c.chat + '.jsonl' });
+            await window.__fakeST.renameChat(characters[state.characterId].chat + ' (renamed)');
         };
         renderList();
         renderChat();

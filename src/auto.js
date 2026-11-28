@@ -136,10 +136,12 @@ export function onReply(mesId, type = 'normal') {
     const t = Number.isFinite(sent) ? sent : Date.now();
     const text = String(m.mes || '');
     const keys = [sc.charKey, sc.personaKey].filter(Boolean);
-    const isContinue = String(type) === 'continue';
+    // 0.12.2: without streaming, a continue arrives as "appendFinal".
+    const isContinue = ['continue', 'append', 'appendFinal'].includes(String(type));
+    let dropped = false;
     if (!isContinue) {
         // A swipe or regenerate replaces this reply's earlier automatic changes.
-        for (const k of keys) dropAutoAt(sc.chatKey, k, mi);
+        for (const k of keys) if (dropAutoAt(sc.chatKey, k, mi)) dropped = true;
     }
     const own = [];
     for (const k of keys) {
@@ -153,7 +155,7 @@ export function onReply(mesId, type = 'normal') {
         if (isContinue) dropAutoAt(sc.chatKey, c.key, mi, 'kw');
         autoChange(sc.chatKey, c.key, c.id, { t, mi, src: c.src });
     }
-    if (all.length) save();
+    if (all.length || dropped) save(); // 0.12.2: also when an old change was only taken away
     return all.map(c => ({ ...c, t }));
 }
 
