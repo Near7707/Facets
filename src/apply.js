@@ -274,6 +274,43 @@ const clips = (el) => {
     return cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
 };
 
+// 0.11.1: the spot is measured once, so it must be measured again when the layout moves —
+// a theme or another extension restyling the chat, the window resizing, a line added above the avatar.
+// Only the frames are redrawn here (cheap), not the whole applyAllSoon.
+let frameRaf = 0;
+let frameLate = 0;
+function framesSoon() {
+    if (!frameRaf) {
+        frameRaf = requestAnimationFrame(() => {
+            frameRaf = 0;
+            try { applyFrames(); } catch (e) { console.error('[Facets]', e); }
+        });
+    }
+    // Once more a little later, for layouts that change with a short animation.
+    clearTimeout(frameLate);
+    frameLate = setTimeout(() => {
+        try { applyFrames(); } catch (e) { console.error('[Facets]', e); }
+    }, 400);
+}
+
+let frameRO = null;
+let frameWatched = new Set();
+function watchFrameBoxes(els) {
+    if (typeof ResizeObserver !== 'function') return;
+    const chat = document.getElementById('chat');
+    if (chat) els.add(chat);
+    if (els.size === frameWatched.size && [...els].every(e => frameWatched.has(e))) return;
+    if (!frameRO) frameRO = new ResizeObserver(() => framesSoon());
+    frameRO.disconnect();
+    frameWatched = els;
+    for (const el of els) frameRO.observe(el);
+}
+function unwatchFrameBoxes() {
+    frameRO?.disconnect();
+    frameWatched = new Set();
+    clearTimeout(frameLate);
+}
+
 /** The box the deco is drawn on: the avatar's wrapper when it has a box and doesn't clip, else the message. */
 function frameHolder(img) {
     const wrap = img.closest('.mesAvatarWrapper');
@@ -290,33 +327,45 @@ export function applyFrames() {
         want.c = frameOf(sc.chatKey, sc.charKey);
         want.p = sc.personaKey ? frameOf(sc.chatKey, sc.personaKey) : null;
     }
-    let radius = '';
-    let box = null;
-    let kind = 'wrap';
+    // 0.11.1: measured for the character and for "me" separately — a theme or another extension
+    // (a messenger layout, for example) can put the two avatars in different spots.
+    const m = { c: null, p: null };
+    const watched = new Set();
     for (const img of document.querySelectorAll('#chat .mes .avatar img')) {
         const key = (want.c || want.p) ? keyFromSrc(originalSrc(img)) : null;
         const tag = key && key === sc.charKey && want.c ? 'c' : key && key === sc.personaKey && want.p ? 'p' : '';
         if (tag) {
             if (img.dataset.facetsFrame !== tag) img.dataset.facetsFrame = tag;
-            if (!box) {
-                // Where the picture sits in its holder box (every chat avatar has the same size).
+            if (!m[tag]) {
+                // Where the picture sits in its holder box (every avatar of one side has the same spot).
                 const holder = frameHolder(img);
-                kind = holder.kind;
                 const r = img.getBoundingClientRect();
                 const o = holder.el?.getBoundingClientRect();
                 if (o && o.width > 0 && r.width > 0 && r.height > 0) {
                     // Measured from the holder's padding edge, where position: absolute starts.
                     const h = holder.el;
-                    box = { x: r.left - o.left - h.clientLeft, y: r.top - o.top - h.clientTop, w: r.width, h: r.height };
-                    radius = getComputedStyle(img).borderRadius;
+                    m[tag] = {
+                        kind: holder.kind,
+                        box: { x: r.left - o.left - h.clientLeft, y: r.top - o.top - h.clientTop, w: r.width, h: r.height },
+                        radius: getComputedStyle(img).borderRadius,
+                    };
+                    watched.add(img);
+                    watched.add(h);
+                    const mes = img.closest('.mes');
+                    if (mes) watched.add(mes);
                 }
             }
         } else if (img.dataset.facetsFrame) delete img.dataset.facetsFrame;
     }
+    watchFrameBoxes(watched);
     // The ring follows the avatar's own corner radius (round, square, rounded or tall rectangle).
-    const r = /^[\d.]+(px|%)$/.test(radius) ? radius : '50%';
-    const C = holderSel(kind, 'c'), P = holderSel(kind, 'p');
-    const css = frameCss(C[0], C[1], want.c, r, box) + frameCss(P[0], P[1], want.p, r, box);
+    const part = (tag) => {
+        const x = m[tag];
+        const r = x && /^[\d.]+(px|%)$/.test(x.radius) ? x.radius : '50%';
+        const S = holderSel(x ? x.kind : 'wrap', tag);
+        return frameCss(S[0], S[1], want[tag], r, x ? x.box : null);
+    };
+    const css = part('c') + part('p');
     if (css === lastFrameCss) return;
     lastFrameCss = css;
     let el = document.getElementById('facets_frames');
@@ -484,9 +533,33 @@ export function startObservers() {
     watch('#chat');
     watch('#rm_print_characters_block');
     watch('#avatar_load_preview');
+    watchLayout();
+}
+
+// 0.11.1: things that move the avatars without resizing anything Facets watches:
+// a class switched on <html>, <body> or #chat (a mode of a theme or another extension),
+// or a stylesheet added or removed in <head> (our own #facets_frames is ignored).
+function watchLayout() {
+    const mo = new MutationObserver((list) => {
+        for (const m of list) {
+            if (m.type === 'attributes') { framesSoon(); return; }
+            for (const n of [...m.addedNodes, ...m.removedNodes]) {
+                if (n.nodeType !== 1 || n.id === 'facets_frames') continue;
+                if (n.matches('style, link[rel~="stylesheet"]')) { framesSoon(); return; }
+            }
+        }
+    });
+    const opts = { attributes: true, attributeFilter: ['class', 'style'] };
+    mo.observe(document.documentElement, opts);
+    mo.observe(document.body, opts);
+    const chat = document.getElementById('chat');
+    if (chat) mo.observe(chat, opts);
+    mo.observe(document.head, { childList: true });
+    observers.push(mo);
 }
 
 export function stopObservers() {
     observers.forEach(o => o.disconnect());
     observers = [];
+    unwatchFrameBoxes();
 }
