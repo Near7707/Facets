@@ -2,7 +2,7 @@
 
 import { cleanDeco, cleanFrame, STICKER_DECO } from './deco.js';
 import { LOOKS, BASIC_IDS, MAX_STICKERS } from './stickers.js';
-import { cleanCard, cleanDraft, cardFiles, cardPaths, MAX_CARDS } from './cards.js';
+import { cleanCard, cleanDraft, cardFiles, cardPaths, cleanTapeLook, MAX_CARDS } from './cards.js';
 
 export const MODULE = 'facets';
 export const FORMAT = 1;
@@ -61,6 +61,8 @@ const DEFAULTS = Object.freeze({
     // Look picked for new stickers (0.10.0)
     stickerLook: 'gloss',
     stickerSpark: true,
+    // 0.12.0: how the next photocard tape looks (when no tape is picked).
+    tapeLook: { pat: 'gingham', color: '#ffd1e3', band: 'mid', torn: true },
     // 0.11.0: photocards, newest first: Card[] (see cards.js). Pictures are files; only the layout is kept here.
     cards: [],
     // The photocard being made (one at a time), kept so closing the window loses nothing: { base, card, uploads }
@@ -168,6 +170,7 @@ export function migrate(s) {
     }
     if (!LOOKS.includes(s.stickerLook)) s.stickerLook = 'gloss';
     if (typeof s.stickerSpark !== 'boolean') s.stickerSpark = true;
+    if (!cleaned.has(s.tapeLook)) { s.tapeLook = cleanTapeLook(s.tapeLook); cleaned.add(s.tapeLook); }
     if (![0, 1, 3, 5].includes(s.tellCount)) s.tellCount = 1;
     if (!THEMES.includes(s.theme)) s.theme = 'st';
     if (typeof s.ignoreWords !== 'string') s.ignoreWords = DEFAULT_IGNORE;

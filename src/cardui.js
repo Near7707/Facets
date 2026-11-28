@@ -10,7 +10,8 @@ import {
 import {
     CARD_W, CARD_H, MAX_CARD_PICS, MAX_CARD_STICKERS, CARD_FOLDER, CARD_PIC_MAX, CARD_PATS, CARD_FIXED, CARD_COLORS,
     ITEM_W_MIN, ITEM_W_MAX, OPACITY_MIN, cleanCard, newCard, bgUrl, patSample, itemSrc, renderCard, canvasData,
-    normRot,
+    normRot, CARD_PAD, TAPE_PATS, TAPE_FIXED, TAPE_COLORS, TAPE_BANDS, TAPE_LEN_MIN, FRAME_WIDTHS, FRAME_COLORS, FRAME_RADII,
+    cleanTapeLook, tapeSample, tapeSize, frameUrl, frameRadius, itemReach, cardOverflow, cardPad,
 } from './cards.js';
 import { BASIC_IDS, LOOKS, MAX_STICKERS, basicUrl } from './stickers.js';
 import { urlOf, uploadDataURL, deletePath, loadImage } from './images.js';
@@ -28,7 +29,7 @@ const ed = {
     sel: null, // selected item id
     undo: [],
     redo: [],
-    tab: 'pic', // bg | pic | stk
+    tab: 'pic', // bg | pic | stk | tape
     organize: false, // [Organize] on the list (tap = delete)
     sheet: null, // after saving: { url, canvas, n, stuck }
 };
@@ -40,6 +41,9 @@ const esc = (s) => H.esc(s);
 // 0.11.3: one handle turns and resizes.
 const TURN_SIZE_ICON = '<svg class="facets-turnsize-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3.5v4h-4"/><path d="M9.5 14.5l5-5"/><path d="M11 9.5h3.5V13"/><path d="M9.5 11v3.5H13"/></svg>';
 const icon = (name) => `<i class="fa-solid ${name}" aria-hidden="true"></i>`;
+const TABS = ['bg', 'pic', 'stk', 'tape'];
+// Where each new tape goes: across the top, then over the corners (card share, angle).
+const TAPE_SPOTS = [[0.5, 0.012, -4], [0.07, 0.045, -45], [0.93, 0.045, 45], [0.07, 0.955, 45], [0.93, 0.955, -45], [0.5, 0.988, 3]];
 
 // ---------- entering and leaving ----------
 
@@ -61,7 +65,8 @@ function persist() {
     setCardDraft({ base: ed.base, card: ed.card, uploads: ed.uploads });
 }
 
-const draftHasWork = (d) => !!d && (d.base || d.card.items.length || d.uploads.length || d.card.bg.kind !== 'pat' || d.card.bg.pat !== 'holo');
+const draftHasWork = (d) => !!d && (d.base || d.card.items.length || d.uploads.length || d.card.bg.kind !== 'pat' || d.card.bg.pat !== 'holo'
+    || d.card.frame.w !== 'none' || d.card.frame.r !== 'sq' || d.card.cardOnly);
 
 /** Throw the draft away (and its own files nobody else uses). */
 async function discardDraft() {
@@ -151,13 +156,17 @@ export function viewCards() {
 
 const findItem = (id) => ed.card?.items.find(it => it.id === id) || null;
 const count = (kind) => ed.card.items.filter(it => it.kind === kind).length;
+const stkCount = () => ed.card.items.filter(it => it.kind !== 'pic').length; // stickers and tape share 12
 
 function itemHtml(it) {
     const sel = it.id === ed.sel;
     const src = itemSrc(it, urlOf);
-    const handles = sel ? `<span class="facets-cb-selbox" aria-hidden="true"></span>
-        <button type="button" class="facets-cb-size" title="${esc(t('stage_turnsize_drag'))}" aria-label="${esc(t('stage_turnsize_drag'))}">${TURN_SIZE_ICON}</button>` : '';
-    return `<div class="facets-cb-item${sel ? ' is-sel' : ''}" data-id="${esc(it.id)}" style="${itemStyle(it)}">
+    const tape = it.kind === 'tape';
+    const end = (k) => `<button type="button" class="facets-cb-end" data-end="${k}" title="${esc(t('tape_end_drag'))}" aria-label="${esc(t('tape_end_drag'))}"></button>`;
+    const handles = !sel ? '' : tape ? `<span class="facets-cb-selbox" aria-hidden="true"></span>${end('a')}${end('b')}`
+        : `<span class="facets-cb-selbox" aria-hidden="true"></span>
+        <button type="button" class="facets-cb-size" title="${esc(t('stage_turnsize_drag'))}" aria-label="${esc(t('stage_turnsize_drag'))}">${TURN_SIZE_ICON}</button>`;
+    return `<div class="facets-cb-item${tape ? ' is-tape' : ''}${sel ? ' is-sel' : ''}" data-id="${esc(it.id)}" style="${itemStyle(it)}">
         <img src="${esc(src)}" alt="" draggable="false" style="aspect-ratio:${it.ar};opacity:${it.opacity};${it.flip ? 'transform:scaleX(-1);' : ''}" onerror="this.parentNode.classList.add('is-broken')">
         <span class="facets-cb-missing">${esc(t('card_deleted'))}</span>${handles}</div>`;
 }
@@ -168,18 +177,34 @@ function itemStyle(it) {
 
 function boardBg() {
     const bg = ed.card.bg;
-    if (bg.kind === 'img' && bg.path) return `background-image:url('${esc(urlOf(bg.path).replace(/'/g, '%27'))}');background-size:cover;background-position:center`;
-    if (bg.kind === 'clear' || bg.kind === 'img') return '';
-    return `background-image:url('${bgUrl(bg)}');background-size:100% 100%`;
+    const r = frameRadius(ed.card.frame);
+    const round = `border-radius:${(r / CARD_W * 100).toFixed(3)}% / ${(r / CARD_H * 100).toFixed(3)}%;`;
+    if (bg.kind === 'img' && bg.path) return `${round}background-image:url('${esc(urlOf(bg.path).replace(/'/g, '%27'))}');background-size:cover;background-position:center`;
+    if (bg.kind === 'clear' || bg.kind === 'img') return round;
+    return `${round}background-image:url('${bgUrl(bg)}');background-size:100% 100%`;
+}
+
+/** The dotted line round the card: how far things can go, and what gets saved. */
+function areaHtml() {
+    const x = (CARD_PAD / CARD_W * 100).toFixed(3), y = (CARD_PAD / CARD_H * 100).toFixed(3);
+    const key = ed.card.cardOnly ? 'card_area_only' : cardOverflow(ed.card) ? 'card_area_out' : 'card_area_card';
+    return `<div class="facets-cb-area${cardPad(ed.card) ? ' is-out' : ''}" style="left:-${x}%;right:-${x}%;top:-${y}%;bottom:-${y}%" aria-hidden="true">
+        <span class="facets-cb-area-label">${esc(t(key))}</span></div>`;
 }
 
 function toolsHtml() {
     const it = findItem(ed.sel);
     if (!it) return '';
+    const tape = it.kind === 'tape';
     const b = (act, ic, key, extra = '') => `<button type="button" class="facets-cb-tbtn${extra}" data-act="${act}" title="${esc(t(key))}" aria-label="${esc(t(key))}">${icon(ic)}</button>`;
     const i = ed.card.items.indexOf(it);
     const front = i < ed.card.items.length - 1 ? '' : ' is-off';
     const back = i > 0 ? '' : ' is-off';
+    if (tape) {
+        return `<div class="facets-cb-tools" role="toolbar" aria-label="${esc(t('card_tape_tools'))}">
+        <div class="facets-cb-trow">${b('card-front', 'fa-angles-up', 'card_front', front)}${b('card-back', 'fa-angles-down', 'card_back', back)}<span class="facets-stage-sep" aria-hidden="true"></span>${b('card-remove', 'fa-trash-can', 'card_remove', ' is-danger')}</div>
+      </div>`;
+    }
     return `<div class="facets-cb-tools" role="toolbar" aria-label="${esc(t('card_tools'))}">
         <label class="facets-cb-op"><span>${esc(t('card_opacity'))}</span><input type="range" min="${Math.round(OPACITY_MIN * 100)}" max="100" value="${Math.round(it.opacity * 100)}" data-act="card-opacity" aria-label="${esc(t('card_opacity'))}"></label>
         <div class="facets-cb-trow">${b('card-front', 'fa-angles-up', 'card_front', front)}${b('card-back', 'fa-angles-down', 'card_back', back)}<span class="facets-stage-sep" aria-hidden="true"></span>${b('card-flip', 'fa-arrows-left-right', 'card_flip', it.flip ? ' on' : '')}${b('card-remove', 'fa-trash-can', 'card_remove', ' is-danger')}</div>
@@ -205,17 +230,60 @@ function panelBg() {
           <div class="facets-note">${esc(t('card_bg_img_note'))}</div>`;
     }
     if (bg.kind === 'clear') inner += `<div class="facets-note">${esc(t('card_bg_clear_note'))}</div>`;
-    return `<div class="facets-chips" role="radiogroup">${kinds}</div>${inner}`;
+    return `<div class="facets-chips" role="radiogroup">${kinds}</div>${inner}${frameSection()}`;
 }
 
-function swatches(value, disabled) {
+const chip = (act, v, on, label) => `<button type="button" role="radio" class="facets-chip${on ? ' on' : ''}" data-act="${act}" data-v="${v}" aria-checked="${on}">${esc(label)}</button>`;
+const seg = (act, v, on, label) => `<button type="button" role="radio" class="facets-segbtn${on ? ' on' : ''}" data-act="${act}" data-v="${v}" aria-checked="${on}">${esc(label)}</button>`;
+
+/** 0.12.0: the card border (thickness, colour, corners), under the background. */
+function frameSection() {
+    const f = ed.card.frame;
+    const widths = Object.keys(FRAME_WIDTHS).map(k => chip('card-frame-w', k, f.w === k, t(`card_frame_${k}`))).join('');
+    const corners = Object.keys(FRAME_RADII).map(k => chip('card-frame-r', k, f.r === k, t(`card_corner_${k}`))).join('');
+    return `<div class="facets-cb-sub">
+        <div class="facets-cb-subtitle">${esc(t('card_frame_title'))}</div>
+        <div class="facets-chips" role="radiogroup" aria-label="${esc(t('card_frame_title'))}">${widths}</div>
+        ${swatches(f.color, f.w === 'none', 'card-frame-color', FRAME_COLORS)}
+        <div class="facets-cb-subtitle is-small">${esc(t('card_corner'))}</div>
+        <div class="facets-chips" role="radiogroup" aria-label="${esc(t('card_corner'))}">${corners}</div>
+        <div class="facets-note">${esc(t('card_frame_note'))}</div>
+      </div>`;
+}
+
+function swatches(value, disabled, act = 'card-color', colors = CARD_COLORS) {
     const v = String(value || '').toLowerCase();
-    const custom = v && !CARD_COLORS.includes(v);
-    const sws = CARD_COLORS.map((c, i) => `<button type="button" class="facets-swatch${v === c ? ' on' : ''}" data-act="card-color" data-v="${c}" style="--sw:${c}" title="${esc(t('color_n', { n: i + 1 }))}" aria-label="${esc(t('color_n', { n: i + 1 }))}" aria-pressed="${v === c}"${disabled ? ' disabled' : ''}></button>`).join('');
+    const custom = v && !colors.includes(v);
+    const sws = colors.map((c, i) => `<button type="button" class="facets-swatch${v === c ? ' on' : ''}" data-act="${act}" data-v="${c}" style="--sw:${c}" title="${esc(t('color_n', { n: i + 1 }))}" aria-label="${esc(t('color_n', { n: i + 1 }))}" aria-pressed="${v === c}"${disabled ? ' disabled' : ''}></button>`).join('');
     return `<div class="facets-swatches${disabled ? ' is-off' : ''}">${sws}
         <label class="facets-swatch facets-swatch-custom${custom ? ' on' : ''}" title="${esc(t('color_custom'))}" style="--sw:${custom ? v : '#ffffff'}">
-          ${icon('fa-eye-dropper')}<input type="color" data-act="card-color" value="${custom ? v : '#ffffff'}" aria-label="${esc(t('color_custom'))}"${disabled ? ' disabled' : ''}>
+          ${icon('fa-eye-dropper')}<input type="color" data-act="${act}" value="${custom ? v : '#ffffff'}" aria-label="${esc(t('color_custom'))}"${disabled ? ' disabled' : ''}>
         </label></div>`;
+}
+
+/** 0.12.0: the tape tab. With a tape picked, changes go to it; otherwise they are remembered for the next one. */
+function panelTape() {
+    const sel = findItem(ed.sel);
+    const tp = sel?.kind === 'tape' ? sel : null;
+    const look = tp ? cleanTapeLook(tp) : cleanTapeLook(settings().tapeLook);
+    const n = stkCount();
+    const full = n >= MAX_CARD_STICKERS;
+    const pats = TAPE_PATS.map(p => `<button type="button" class="facets-cb-pat facets-cb-tpat${look.pat === p ? ' on' : ''}" data-act="card-tape" data-k="pat" data-v="${p}" aria-pressed="${look.pat === p}">
+        <span class="facets-cb-patimg" style="background-image:url(&quot;${tapeSample({ ...look, pat: p, torn: false })}&quot;)"></span><span>${esc(t(`tape_pat_${p}`))}</span></button>`).join('');
+    const fixed = TAPE_FIXED.has(look.pat);
+    const bands = Object.keys(TAPE_BANDS).map(k => seg('card-tape', k, look.band === k, t(`tape_band_${k}`)).replace('data-act="card-tape"', 'data-act="card-tape" data-k="band"')).join('');
+    const ends = [['torn', true], ['straight', false]].map(([k, v]) => seg('card-tape', k, look.torn === v, t(`tape_end_${k}`)).replace('data-act="card-tape"', 'data-act="card-tape" data-k="torn"')).join('');
+    return `<div class="facets-cb-pats facets-cb-tpats">${pats}</div>
+      ${swatches(look.color, fixed, 'card-tape-color', TAPE_COLORS)}
+      ${fixed ? `<div class="facets-note">${esc(t('border_fixed_color'))}</div>` : ''}
+      <div class="facets-cb-trow2"><span class="facets-cb-subtitle is-small">${esc(t('tape_band'))}</span><div class="facets-seg" role="radiogroup" aria-label="${esc(t('tape_band'))}">${bands}</div></div>
+      <div class="facets-cb-trow2"><span class="facets-cb-subtitle is-small">${esc(t('tape_end'))}</span><div class="facets-seg" role="radiogroup" aria-label="${esc(t('tape_end'))}">${ends}</div></div>
+      <div class="facets-cb-tapeadd">
+        <button type="button" class="facets-btn facets-primary" data-act="card-tape-add"${full ? ' disabled' : ''}>${icon('fa-plus')} ${esc(t('tape_add'))}</button>
+        <span class="facets-count">${esc(t('tape_count', { n, max: MAX_CARD_STICKERS }))}</span>
+      </div>
+      <div class="facets-note">${esc(t(tp ? 'tape_note_sel' : 'tape_note_next'))} ${esc(t('tape_ends_note'))}</div>
+      ${full ? `<div class="facets-note">${esc(t('card_stk_full', { max: MAX_CARD_STICKERS }))}</div>` : ''}`;
 }
 
 function panelPics() {
@@ -241,7 +309,7 @@ function panelPics() {
 
 function panelStickers() {
     const s = settings();
-    const n = count('stk');
+    const n = stkCount();
     const lock = n >= MAX_CARD_STICKERS ? ' disabled' : '';
     const looks = LOOKS.map(v => `<button type="button" role="radio" class="facets-segbtn${s.stickerLook === v ? ' on' : ''}" data-act="stk-look" data-v="${v}" aria-checked="${s.stickerLook === v}">${esc(t(`stk_look_${v}`))}</button>`).join('');
     const spark = `<label class="facets-toggle facets-stk-spark" title="${esc(t('stk_spark_note'))}">
@@ -259,7 +327,7 @@ function panelStickers() {
             <img src="${esc(urlOf(m.path))}" alt="" draggable="false" loading="lazy"><span>${esc(name)}</span></button>`;
     }).join('');
     return `<div class="facets-stk-lookrow"><div class="facets-seg" role="radiogroup" aria-label="${esc(t('stk_look'))}">${looks}</div>${spark}</div>
-      <div class="facets-cb-pichead"><span class="facets-count">${esc(t('card_pics_count', { n, max: MAX_CARD_STICKERS }))}</span></div>
+      <div class="facets-cb-pichead"><span class="facets-count">${esc(t('tape_count', { n, max: MAX_CARD_STICKERS }))}</span></div>
       <div class="facets-stk-grid">${basic}</div>
       ${mine ? `<div class="facets-closet-head">${H.kicker(t('stk_mine_label'))}</div><div class="facets-stk-grid">${mine}</div>
       <div class="facets-note">${esc(t('card_mine_note'))}</div>` : ''}
@@ -271,9 +339,17 @@ function sheetHtml() {
     if (!sh) return '';
     const inChat = H.chatAvailable();
     const btn = (act, ic, title, sub, dis = '') => `<button type="button" class="facets-btn facets-cb-bigbtn" data-act="${act}"${dis}>${icon(ic)}<span><b>${esc(title)}</b><small>${esc(sub)}</small></span></button>`;
+    const w = sh.canvas?.width || CARD_W, h = sh.canvas?.height || CARD_H;
+    const size = t(sh.pad ? 'card_size_out' : 'card_size_card', { w, h });
+    // "Card only" matters only when something hangs over the edge (or it is already on).
+    const only = sh.over || ed.card?.cardOnly ? `<label class="facets-toggle facets-cb-only">
+        <span class="facets-toggle-text"><span>${esc(t('card_only'))}</span><small>${esc(t('card_only_note'))}</small></span>
+        <input type="checkbox" data-act="card-only"${ed.card?.cardOnly ? ' checked' : ''}>
+        <span class="facets-switch" aria-hidden="true"></span></label>` : '';
     return `<div class="facets-cb-sheetwrap"><div class="facets-cb-sheet" role="dialog" aria-label="${esc(t('card_saved_title'))}">
-        <div class="facets-cb-sheettop"><img src="${esc(sh.url)}" alt="" draggable="false"><div><div class="facets-cb-sheettitle">${esc(t('card_saved_title'))}</div><div class="facets-note">${esc(t('card_saved_note'))}</div></div></div>
-        ${btn('card-download', 'fa-download', t('card_download'), `${CARD_W} × ${CARD_H}`)}
+        <div class="facets-cb-sheettop"><span class="facets-cb-sheetimg${sh.pad ? ' is-pad' : ''}"><img src="${esc(sh.url)}" alt="" draggable="false"></span><div><div class="facets-cb-sheettitle">${esc(t('card_saved_title'))}</div><div class="facets-note">${esc(t('card_saved_note'))}</div><div class="facets-note facets-cb-size-note">${esc(size)}</div></div></div>
+        ${only}
+        ${btn('card-download', 'fa-download', t('card_download'), `${w} × ${h}`)}
         ${btn('card-stick', sh.stuck ? 'fa-check' : 'fa-thumbtack', t(sh.stuck ? 'card_stuck' : 'card_stick'), t(inChat ? 'card_stick_note' : 'card_stick_need_chat'), inChat && !sh.stuck ? '' : ' disabled')}
         <div class="facets-note">${esc(t('card_ios_note'))}</div>
         <div class="facets-note">${esc(t('card_keep_note'))}</div>
@@ -285,15 +361,18 @@ export function viewCard() {
     if (!ed.card && !loadDraft()) { H.state.screen = 'cards'; return viewCards(); }
     const title = ed.base ? cardName(ed.base) : t('card_title_new');
     const head = `${H.headTitle(title)}<button type="button" class="facets-btn facets-primary facets-small facets-cb-save" data-act="card-save">${esc(t('card_save'))}</button>`;
-    const tabs = ['bg', 'pic', 'stk'].map(k => `<button type="button" role="tab" class="facets-segbtn${ed.tab === k ? ' on' : ''}" data-act="card-tab" data-tab="${k}" aria-selected="${ed.tab === k}">${esc(t(`card_tab_${k}`))}</button>`).join('');
-    const panel = ed.tab === 'bg' ? panelBg() : ed.tab === 'stk' ? panelStickers() : panelPics();
+    const tabs = TABS.map(k => `<button type="button" role="tab" class="facets-segbtn${ed.tab === k ? ' on' : ''}" data-act="card-tab" data-tab="${k}" aria-selected="${ed.tab === k}">${esc(t(`card_tab_${k}`))}</button>`).join('');
+    const panel = ed.tab === 'bg' ? panelBg() : ed.tab === 'stk' ? panelStickers() : ed.tab === 'tape' ? panelTape() : panelPics();
+    const fu = frameUrl(ed.card.frame);
     const body = `<div class="facets-cb-work">
         <div class="facets-cb-bench">
           <div class="facets-cb-side">
             <button type="button" class="facets-iconbtn" data-act="card-undo" title="${esc(t('card_undo'))}" aria-label="${esc(t('card_undo'))}"${ed.undo.length ? '' : ' disabled'}>${icon('fa-rotate-left')}</button>
             <button type="button" class="facets-iconbtn" data-act="card-redo" title="${esc(t('card_redo'))}" aria-label="${esc(t('card_redo'))}"${ed.redo.length ? '' : ' disabled'}>${icon('fa-rotate-right')}</button>
           </div>
-          <div class="facets-cb-board${ed.card.bg.kind === 'clear' || (ed.card.bg.kind === 'img' && !ed.card.bg.path) ? ' is-clear' : ''}" style="${boardBg()}" aria-label="${esc(t('booth_card'))}">
+          <div class="facets-cb-board" aria-label="${esc(t('booth_card'))}">
+            ${areaHtml()}
+            <div class="facets-cb-face${ed.card.bg.kind === 'clear' || (ed.card.bg.kind === 'img' && !ed.card.bg.path) ? ' is-clear' : ''}" style="${boardBg()}" aria-hidden="true">${fu ? `<span class="facets-cb-frame" style="background-image:url('${fu}')"></span>` : ''}</div>
             ${ed.card.items.map(itemHtml).join('')}
           </div>
           ${toolsHtml()}
@@ -343,8 +422,10 @@ function sizeBoard() {
     if (!board) return;
     const side = bench.querySelector('.facets-cb-side');
     const sideW = side ? side.offsetWidth + 16 : 0;
-    const W = bench.clientWidth - sideW * 2;
-    const Hh = bench.clientHeight - 28;
+    // 0.12.0: the dotted save area round the card has to fit too.
+    const kx = 1 + 2 * CARD_PAD / CARD_W, ky = 1 + 2 * CARD_PAD / CARD_H;
+    const W = (bench.clientWidth - sideW * 2) / kx;
+    const Hh = (bench.clientHeight - 44) / ky; // room for the label under the dotted line
     const w = Math.max(80, Math.min(W, Hh * CARD_W / CARD_H));
     board.style.width = `${Math.round(w)}px`;
     board.style.height = `${Math.round(w * CARD_H / CARD_W)}px`;
@@ -484,7 +565,7 @@ async function setBgFile(file) {
 }
 
 async function addSticker2(kind, ref) {
-    if (count('stk') >= MAX_CARD_STICKERS) { H.toast('warning', t('card_stk_full', { max: MAX_CARD_STICKERS })); return; }
+    if (stkCount() >= MAX_CARD_STICKERS) { H.toast('warning', t('card_stk_full', { max: MAX_CARD_STICKERS })); return; }
     const s = settings();
     let src = '', ar = 1;
     if (kind === 'mine') {
@@ -496,6 +577,43 @@ async function addSticker2(kind, ref) {
     const it = { id: newId(), kind: 'stk', skind: kind, ref, src, look: s.stickerLook, spark: s.stickerSpark, ar, w: 0.24, ...spot() };
     ed.sel = it.id;
     change(c => { c.items.push(it); });
+}
+
+function addTape() {
+    if (stkCount() >= MAX_CARD_STICKERS) { H.toast('warning', t('card_stk_full', { max: MAX_CARD_STICKERS })); return; }
+    const [x, y, rot] = TAPE_SPOTS[count('tape') % TAPE_SPOTS.length];
+    const it = { id: newId(), kind: 'tape', ...cleanTapeLook(settings().tapeLook), x, y, rot, w: x === 0.5 ? 0.42 : 0.3 };
+    keepInArea(it);
+    ed.sel = it.id;
+    change(c => { c.items.push(it); });
+}
+
+/** A tape look picked in the tape tab: to the picked tape, or remembered for the next one. */
+function setTape(k, v) {
+    const val = k === 'torn' ? v === 'torn' : v;
+    const it = findItem(ed.sel);
+    if (it?.kind === 'tape') { change(c => { const x = c.items.find(y => y.id === it.id); if (x) x[k] = val; }); return; }
+    const s = settings();
+    s.tapeLook = cleanTapeLook({ ...s.tapeLook, [k]: val });
+    save();
+    H.render();
+}
+
+/** Keep a dragged item's edges inside the dotted save area (when it fits; a very big one only keeps its middle near). */
+function keepInArea(it) {
+    const { ex, ey } = it.kind === 'tape' ? tapeReach(it) : itemReach(it);
+    const fit = (v, e, size) => {
+        const lo = -CARD_PAD + e, hi = size + CARD_PAD - e;
+        return lo <= hi ? Math.min(hi, Math.max(lo, v)) : Math.min(lo, Math.max(hi, v));
+    };
+    it.x = fit(it.x * CARD_W, ex, CARD_W) / CARD_W;
+    it.y = fit(it.y * CARD_H, ey, CARD_H) / CARD_H;
+}
+
+/** For tape only its two ends count (the band is thin). */
+function tapeReach(it) {
+    const L = it.w * CARD_W, a = it.rot * Math.PI / 180;
+    return { ex: Math.abs(Math.cos(a)) * L / 2, ey: Math.abs(Math.sin(a)) * L / 2 };
 }
 
 function moveLayer(dir) {
@@ -515,14 +633,14 @@ async function saveCard() {
     await H.withBusy(async () => {
         persist();
         H.toast('info', t('card_saving'));
-        const { canvas, missing } = await renderCard(ed.card, urlOf);
+        const { canvas, missing, pad } = await renderCard(ed.card, urlOf);
         const path = await uploadDataURL(canvasData(canvas), CARD_FOLDER, `card_${ed.card.id}_${Date.now().toString(36)}`);
         const res = commitCardDraft(path);
         if (!res) throw new Error('no draft');
         for (const p of res.gone) await deletePath(p);
         save();
         if (missing) H.toast('warning', t('card_missing_saved', { n: missing }));
-        ed.sheet = { url: urlOf(path), canvas, id: res.card.id, stuck: false };
+        ed.sheet = { url: urlOf(path), canvas, id: res.card.id, stuck: false, pad, over: cardOverflow(ed.card) };
         ed.base = res.card.id;
         ed.sel = null;
         ok = true;
@@ -598,11 +716,18 @@ function snapRot(r) {
     for (const a of [-180, -90, 0, 90, 180]) if (Math.abs(n - a) <= SNAP) return normRot(a);
     return n;
 }
-const clampW = (w) => Math.min(ITEM_W_MAX, Math.max(ITEM_W_MIN, w));
+const clampW = (w, it) => Math.min(ITEM_W_MAX, Math.max(it?.kind === 'tape' ? TAPE_LEN_MIN : ITEM_W_MIN, w));
 
 function paintItem(it) {
     const el = H.root()?.querySelector(`.facets-cb-item[data-id="${CSS.escape(it.id)}"]`);
-    if (el) el.setAttribute('style', itemStyle(it));
+    if (!el) return;
+    el.setAttribute('style', itemStyle(it));
+    if (it.kind === 'tape') {
+        // A new drawing, so the pattern carries on instead of stretching.
+        const img = el.querySelector('img');
+        const { w, h } = tapeSize(it);
+        if (img) { img.src = itemSrc(it, urlOf); img.style.aspectRatio = String(w / h); }
+    }
 }
 
 function onDown(e) {
@@ -620,12 +745,15 @@ function onDown(e) {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (!gesture) {
         const c = centerOf(it);
-        const kind = e.target.closest('.facets-cb-rot') ? 'rot' : e.target.closest('.facets-cb-size') ? 'size' : 'move';
+        const endEl = e.target.closest('.facets-cb-end');
+        const kind = endEl ? 'end' : e.target.closest('.facets-cb-rot') ? 'rot' : e.target.closest('.facets-cb-size') ? 'size' : 'move';
         gesture = {
             id: it.id, kind, start: { ...it }, snap: JSON.stringify(ed.card), x0: e.clientX, y0: e.clientY, moved: false, multi: false,
             a0: Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI, d0: Math.hypot(e.clientX - c.x, e.clientY - c.y),
-            wasSel: ed.sel === it.id,
+            wasSel: ed.sel === it.id, end: endEl?.dataset.end || '',
         };
+        // Picking a tape opens the tape tab, where its look can be changed.
+        if (it.kind === 'tape' && ed.sel !== it.id && ed.tab !== 'tape') { ed.tab = 'tape'; gesture.wasSel = false; }
         if (ed.sel !== it.id) {
             // Select without redrawing (the hand is still down); the handles come with the redraw at the end.
             ed.sel = it.id;
@@ -650,7 +778,28 @@ function onMove(e) {
     const it = findItem(gesture.id);
     if (!it) return;
     const s = gesture.start;
-    if (gesture.kind === 'rot') {
+    if (gesture.kind === 'end') {
+        // Drag one end of a tape: the other end stays put; length and angle follow.
+        const r = boardRect();
+        if (!r) return;
+        const px = Math.min(CARD_W + CARD_PAD, Math.max(-CARD_PAD, (e.clientX - r.left) / r.width * CARD_W));
+        const py = Math.min(CARD_H + CARD_PAD, Math.max(-CARD_PAD, (e.clientY - r.top) / r.height * CARD_H));
+        const L0 = s.w * CARD_W, a0 = s.rot * Math.PI / 180;
+        const dx = Math.cos(a0) * L0 / 2, dy = Math.sin(a0) * L0 / 2;
+        const cx = s.x * CARD_W, cy = s.y * CARD_H;
+        const isA = gesture.end === 'a';
+        const fx = isA ? cx + dx : cx - dx, fy = isA ? cy + dy : cy - dy; // the end that stays
+        const vx = isA ? fx - px : px - fx, vy = isA ? fy - py : py - fy; // from end a to end b
+        const len = Math.max(TAPE_LEN_MIN * CARD_W, Math.hypot(vx, vy));
+        const rot = snapRot(Math.atan2(vy, vx) * 180 / Math.PI);
+        const ux = Math.cos(rot * Math.PI / 180), uy = Math.sin(rot * Math.PI / 180);
+        const mx = isA ? fx - ux * len / 2 : fx + ux * len / 2, my = isA ? fy - uy * len / 2 : fy + uy * len / 2;
+        it.w = Math.min(ITEM_W_MAX, len / CARD_W);
+        it.rot = rot;
+        it.x = mx / CARD_W;
+        it.y = my / CARD_H;
+        gesture.moved = true;
+    } else if (gesture.kind === 'rot') {
         const c = centerOf(it);
         const a = Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI;
         it.rot = snapRot(s.rot + a - gesture.a0);
@@ -659,11 +808,11 @@ function onMove(e) {
         const c = centerOf(it);
         const d = Math.hypot(e.clientX - c.x, e.clientY - c.y);
         const a = Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI;
-        if (gesture.d0 > 4 && d > 0) { it.w = clampW(s.w * d / gesture.d0); it.rot = snapRot(s.rot + a - gesture.a0); gesture.moved = true; }
+        if (gesture.d0 > 4 && d > 0) { it.w = clampW(s.w * d / gesture.d0, it); it.rot = snapRot(s.rot + a - gesture.a0); gesture.moved = true; }
     } else if (pointers.size >= 2) {
         const tw = two();
         if (gesture.d0 > 0 && tw?.d > 0) {
-            it.w = clampW(s.w * tw.d / gesture.d0);
+            it.w = clampW(s.w * tw.d / gesture.d0, it);
             it.rot = snapRot(s.rot + tw.ang - gesture.a0);
             gesture.moved = true;
         }
@@ -674,6 +823,7 @@ function onMove(e) {
         if (!r) return;
         it.x = Math.min(1.5, Math.max(-0.5, s.x + dx / r.width));
         it.y = Math.min(1.5, Math.max(-0.5, s.y + dy / r.height));
+        keepInArea(it); // 0.12.0: not past the dotted line
         gesture.moved = true;
     }
     paintItem(it);
@@ -702,7 +852,7 @@ function onWheel(e) {
     e.preventDefault();
     if (!wheelSnap) wheelSnap = JSON.stringify(ed.card);
     if (e.shiftKey) it.rot = snapRot(it.rot + (e.deltaY > 0 ? 5 : -5));
-    else it.w = clampW(it.w * (e.deltaY < 0 ? 1.06 : 1 / 1.06));
+    else it.w = clampW(it.w * (e.deltaY < 0 ? 1.06 : 1 / 1.06), it);
     paintItem(it);
     placeTools();
     clearTimeout(wheelTimer);
@@ -729,7 +879,13 @@ export function cardClick(act, el) {
             return true;
         case 'card-organize': ed.organize = !ed.organize; H.render(); return true;
         case 'card-delete': deleteCard(el.dataset.id); return true;
-        case 'card-tab': ed.tab = ['bg', 'pic', 'stk'].includes(el.dataset.tab) ? el.dataset.tab : 'pic'; H.render(); return true;
+        case 'card-tab': ed.tab = TABS.includes(el.dataset.tab) ? el.dataset.tab : 'pic'; H.render(); return true;
+        case 'card-tape': if (['pat', 'band', 'torn'].includes(el.dataset.k)) setTape(el.dataset.k, el.dataset.v); return true;
+        case 'card-tape-color': if (el.tagName === 'BUTTON') setTape('color', el.dataset.v); return true;
+        case 'card-tape-add': addTape(); return true;
+        case 'card-frame-w': change(c => { c.frame = { ...c.frame, w: el.dataset.v }; }); return true;
+        case 'card-frame-r': change(c => { c.frame = { ...c.frame, r: el.dataset.v }; }); return true;
+        case 'card-frame-color': if (el.tagName === 'BUTTON') change(c => { c.frame = { ...c.frame, color: el.dataset.v }; }); return true;
         case 'card-undo': undo(-1); return true;
         case 'card-redo': undo(1); return true;
         case 'card-bg': {
@@ -759,6 +915,15 @@ export function cardChange(act, el) {
         case 'card-pic-file': { const f = el.files; addUploads(f).finally(() => { el.value = ''; }); return true; }
         case 'card-bg-file': { const f = el.files?.[0]; setBgFile(f).finally(() => { el.value = ''; }); return true; }
         case 'card-color': if (el.type === 'color') change(c => { c.bg = { ...c.bg, color: String(el.value).toLowerCase() }; }); return true;
+        case 'card-tape-color': if (el.type === 'color') setTape('color', String(el.value).toLowerCase()); return true;
+        case 'card-frame-color': if (el.type === 'color') change(c => { c.frame = { ...c.frame, color: String(el.value).toLowerCase() }; }); return true;
+        case 'card-only': {
+            // Save again with the new setting (the old file is replaced).
+            const on = el.checked;
+            change(c => { c.cardOnly = on; }, { render: false });
+            saveCard();
+            return true;
+        }
         case 'card-opacity': {
             const it = findItem(ed.sel);
             if (!it) return true;

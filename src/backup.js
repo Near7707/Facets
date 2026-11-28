@@ -5,7 +5,7 @@ import { settings, save, resetAll, migrate, FORMAT, MODULE, ctx, CHAT_TABLES as 
 import { fetchAsDataURL, uploadDataURL, deletePath, folderFor } from './images.js';
 import { cardFiles, CARD_FOLDER } from './cards.js';
 
-const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'theme', 'stickerLook', 'stickerSpark'];
+const PREF_KEYS = ['showInChat', 'showInList', 'tellAI', 'tellCount', 'sinceMode', 'backupImages', 'autoKeywords', 'autoPair', 'ignoreWords', 'showStage', 'stageKbHide', 'theme', 'stickerLook', 'stickerSpark', 'tapeLook'];
 // Every table keyed by chat (the same list the store moves on renames), plus branch marks.
 const CHAT_TABLES = [...STORE_TABLES, 'branchDone'];
 
@@ -147,7 +147,8 @@ export async function importBackup(file, toast) {
     if (cards) { s.cards = cards; s.cardDraft = cardDraft; }
     for (const k of PREF_KEYS) {
         const v = data.prefs?.[k];
-        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (['ignoreWords', 'theme', 'stickerLook'].includes(k) && typeof v === 'string')) s[k] = v;
+        if (typeof v === 'boolean' || (k === 'tellCount' && typeof v === 'number') || (['ignoreWords', 'theme', 'stickerLook'].includes(k) && typeof v === 'string')
+            || (k === 'tapeLook' && v && typeof v === 'object')) s[k] = v; // tapeLook is cleaned by migrate
     }
     // 0.9.0-0.9.1 backups have followTheme instead of theme.
     if (typeof data.prefs?.theme !== 'string' && typeof data.prefs?.followTheme === 'boolean') s.theme = data.prefs.followTheme ? 'st' : 'holo';
