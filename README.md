@@ -29,3 +29,7 @@ An outfit doesn't have to be clothes — a time of day, a place, a season, an in
   - *Photocard*: in the Photo Booth → *Photocard*, make a 55:85 photocard. Pick a background (colour, pattern, your own picture or clear), put on outfit pictures of the character or you, or your own PNGs (up to 8), and stickers (up to 12). Drag to move, two fingers or the mouse wheel to resize and turn (Shift + wheel turns), with undo and redo. Saved photocards stay in *My photocards* to edit again; download one as a PNG, or stick a copy in the chat as one of *My stickers*. An unsaved photocard is kept when you close the window.
   - Photocards, four-cut strips and a collect book are coming later.
 - **Themes.** Pick a look in ⚙ or in the extension settings: *Follow SillyTavern* (default, your theme colours), *Holo*, *Clean* or *Diary*. The wardrobe, the Photo Booth and the tool bar over the chat all use it; light or dark follows your SillyTavern theme. On a phone the window fills the screen.
+
+## License
+
+[MIT](LICENSE)
