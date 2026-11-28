@@ -552,6 +552,8 @@ function closeTools() {
     sizeHandle = null;
 }
 
+// 0.11.3: one handle turns and resizes (turn arrow + size arrow).
+const TURN_SIZE_ICON = '<svg class="facets-turnsize-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3.5v4h-4"/><path d="M9.5 14.5l5-5"/><path d="M11 9.5h3.5V13"/><path d="M9.5 11v3.5H13"/></svg>';
 const deg = (r) => `${Math.round(normRot(r))}°`;
 // 0.7.2: the tool bar's second row is icon buttons only (the name shows on mouse over).
 const ico = (act, icon, label) => `<button type="button" class="facets-stage-btn facets-stage-ico" data-stage-act="${act}" title="${esc(label)}" aria-label="${esc(label)}"><i class="fa-solid ${icon}"></i></button>`;
@@ -587,21 +589,14 @@ function openTools(key) {
            </div>`;
     layer.appendChild(bar);
     if (!st.locked) {
-        rotHandle = document.createElement('button');
-        rotHandle.type = 'button';
-        rotHandle.className = 'facets-stage-rot';
-        rotHandle.dataset.key = key;
-        rotHandle.title = t('stage_rot_drag');
-        rotHandle.setAttribute('aria-label', t('stage_rot_drag'));
-        rotHandle.innerHTML = '<i class="fa-solid fa-rotate"></i>';
-        layer.appendChild(rotHandle);
+        // 0.11.3: no separate turn handle; the corner handle does both.
         sizeHandle = document.createElement('button');
         sizeHandle.type = 'button';
         sizeHandle.className = 'facets-stage-size';
         sizeHandle.dataset.key = key;
-        sizeHandle.title = t('stage_size_drag');
-        sizeHandle.setAttribute('aria-label', t('stage_size_drag'));
-        sizeHandle.innerHTML = '<i class="fa-solid fa-up-right-and-down-left-from-center"></i>';
+        sizeHandle.title = t('stage_turnsize_drag');
+        sizeHandle.setAttribute('aria-label', t('stage_turnsize_drag'));
+        sizeHandle.innerHTML = TURN_SIZE_ICON;
         layer.appendChild(sizeHandle);
     }
     placeTools();
@@ -674,9 +669,8 @@ function placeHandles(f, W, H) {
         sizeHandle.style.left = `${x - 17}px`;
         sizeHandle.style.top = `${y - 17}px`;
         // Arrow and mouse cursor follow the corner's direction.
-        sizeHandle.querySelector('i').style.transform = `rotate(${90 + c.rot}deg)`;
-        const d = ((45 + c.rot) % 180 + 180) % 180;
-        sizeHandle.style.cursor = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'][Math.round(d / 45) % 4];
+        sizeHandle.firstElementChild.style.transform = `rotate(${c.rot}deg)`;
+        sizeHandle.style.cursor = 'grab';
         sizeHandle.hidden = !!f.fig.hidden;
     }
 }
@@ -731,7 +725,7 @@ function onDown(e) {
         const start = { ...currentPlace(key) };
         pointers.clear();
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        gesture = { key, kind: 'size', start, d0: distTo(key, e.clientX, e.clientY), moved: false, t0: Date.now() };
+        gesture = { key, kind: 'size', start, d0: distTo(key, e.clientX, e.clientY), a0: angleTo(key, e.clientX, e.clientY), moved: false, t0: Date.now() };
         return;
     }
     const fig = e.target.closest('.facets-fig');
@@ -768,11 +762,12 @@ function onMove(e) {
         return;
     }
     if (gesture.kind === 'size') {
-        // The middle stays put; farther from it = bigger.
+        // The middle stays put; farther from it = bigger, around it = turn (0.11.3: one handle for both).
         const d = distTo(key, e.clientX, e.clientY);
         if (gesture.d0 > 4 && d > 0) {
             gesture.moved = true;
-            setPlace(key, { ...gesture.start, size: gesture.start.size * d / gesture.d0 });
+            const a = angleTo(key, e.clientX, e.clientY);
+            setPlace(key, { ...gesture.start, size: gesture.start.size * d / gesture.d0, rot: snapRot(gesture.start.rot + a - gesture.a0) });
         }
         return;
     }

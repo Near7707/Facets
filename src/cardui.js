@@ -10,7 +10,7 @@ import {
 import {
     CARD_W, CARD_H, MAX_CARD_PICS, MAX_CARD_STICKERS, CARD_FOLDER, CARD_PIC_MAX, CARD_PATS, CARD_FIXED, CARD_COLORS,
     ITEM_W_MIN, ITEM_W_MAX, OPACITY_MIN, cleanCard, newCard, bgUrl, patSample, itemSrc, renderCard, canvasData,
-    shrinkCanvas, normRot,
+    normRot,
 } from './cards.js';
 import { BASIC_IDS, LOOKS, MAX_STICKERS, basicUrl } from './stickers.js';
 import { urlOf, uploadDataURL, deletePath, loadImage } from './images.js';
@@ -37,6 +37,8 @@ const SNAP = 4;
 const STICKER_FOLDER = 'Facets_stickers';
 
 const esc = (s) => H.esc(s);
+// 0.11.3: one handle turns and resizes.
+const TURN_SIZE_ICON = '<svg class="facets-turnsize-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3.5v4h-4"/><path d="M9.5 14.5l5-5"/><path d="M11 9.5h3.5V13"/><path d="M9.5 11v3.5H13"/></svg>';
 const icon = (name) => `<i class="fa-solid ${name}" aria-hidden="true"></i>`;
 
 // ---------- entering and leaving ----------
@@ -154,8 +156,7 @@ function itemHtml(it) {
     const sel = it.id === ed.sel;
     const src = itemSrc(it, urlOf);
     const handles = sel ? `<span class="facets-cb-selbox" aria-hidden="true"></span>
-        <button type="button" class="facets-cb-rot" title="${esc(t('card_turn'))}" aria-label="${esc(t('card_turn'))}">${icon('fa-rotate-right')}</button>
-        <button type="button" class="facets-cb-size" title="${esc(t('card_size'))}" aria-label="${esc(t('card_size'))}">${icon('fa-up-right-and-down-left-from-center')}</button>` : '';
+        <button type="button" class="facets-cb-size" title="${esc(t('stage_turnsize_drag'))}" aria-label="${esc(t('stage_turnsize_drag'))}">${TURN_SIZE_ICON}</button>` : '';
     return `<div class="facets-cb-item${sel ? ' is-sel' : ''}" data-id="${esc(it.id)}" style="${itemStyle(it)}">
         <img src="${esc(src)}" alt="" draggable="false" style="aspect-ratio:${it.ar};opacity:${it.opacity};${it.flip ? 'transform:scaleX(-1);' : ''}" onerror="this.parentNode.classList.add('is-broken')">
         <span class="facets-cb-missing">${esc(t('card_deleted'))}</span>${handles}</div>`;
@@ -362,7 +363,7 @@ function placeTools() {
     const tw = tools.offsetWidth, th = tools.offsetHeight;
     let x = r.left + r.width / 2 - b.left - tw / 2;
     x = Math.max(6, Math.min(b.width - tw - 6, x));
-    let y = r.top - b.top - th - 40; // room for the turn handle
+    let y = r.top - b.top - th - 10;
     if (y < 6) y = r.bottom - b.top + 26;
     if (y + th > b.height - 6) y = 6;
     tools.style.left = `${Math.round(x)}px`;
@@ -550,8 +551,8 @@ async function stickInChat() {
     const sh = ed.sheet;
     if (!sh?.canvas || sh.stuck || !H.chatAvailable()) return;
     await H.withBusy(async () => {
-        const small = shrinkCanvas(sh.canvas, 512);
-        const path = await uploadDataURL(canvasData(small), STICKER_FOLDER, `stk_${newId()}`);
+        // 0.11.3: full size (it used to be cut down to 512px and looked blurry in the chat).
+        const path = await uploadDataURL(canvasData(sh.canvas), STICKER_FOLDER, `stk_${newId()}`);
         const m = addMySticker(path, cardName(sh.id));
         // Its own copy: deleting the photocard later leaves this sticker alone.
         if (!addSticker(H.currentScene().chatKey, 'mine', m.id, 'cut', false)) H.toast('warning', t('stk_full', { max: MAX_STICKERS }));
@@ -657,7 +658,8 @@ function onMove(e) {
     } else if (gesture.kind === 'size') {
         const c = centerOf(it);
         const d = Math.hypot(e.clientX - c.x, e.clientY - c.y);
-        if (gesture.d0 > 4 && d > 0) { it.w = clampW(s.w * d / gesture.d0); gesture.moved = true; }
+        const a = Math.atan2(e.clientY - c.y, e.clientX - c.x) * 180 / Math.PI;
+        if (gesture.d0 > 4 && d > 0) { it.w = clampW(s.w * d / gesture.d0); it.rot = snapRot(s.rot + a - gesture.a0); gesture.moved = true; }
     } else if (pointers.size >= 2) {
         const tw = two();
         if (gesture.d0 > 0 && tw?.d > 0) {

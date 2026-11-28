@@ -2115,7 +2115,7 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
     background: color-mix(in srgb, var(--facets-bg) 96%, var(--facets-text) 4%); color: var(--facets-accent); border: 1px solid var(--facets-border); box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
     font-size: 13px; touch-action: none; z-index: 2; }
 .facets-cb-rot { left: 50%; top: -38px; transform: translateX(-50%); cursor: grab; }
-.facets-cb-size { right: -16px; bottom: -16px; cursor: nwse-resize; }
+.facets-cb-size { right: -16px; bottom: -16px; cursor: grab; }
 .facets-cb-tools { position: absolute; z-index: 4; width: max-content; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 14px;
     background: color-mix(in srgb, var(--facets-bg) 96%, var(--facets-text) 4%); color: var(--facets-text); border: 1px solid var(--facets-border); box-shadow: 0 6px 16px rgba(20, 10, 40, .24); }
 .facets-cb-bench.is-moving .facets-cb-tools { visibility: hidden; }
@@ -2178,3 +2178,4 @@ button.facets-btile:hover { transform: rotate(var(--tilt, 0deg)) translateY(-2px
 .facets-stage-tools:not(.is-locked) .facets-stage-sz i { width: 14px; text-align: center; font-size: 12px; }
 .facets-stage-tools:not(.is-locked) .facets-stage-op i { width: 14px; text-align: center; }
 .facets-stage-sz input[type="range"] { touch-action: none; }
+.facets-turnsize-ico { display: block; pointer-events: none; }

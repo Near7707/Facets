@@ -667,7 +667,7 @@ async function uploadStickers(files) {
         const items = await readPicked([...files]);
         let added = 0;
         for (const it of items) {
-            const max = 512;
+            const max = 1024; // 0.11.3: was 512 (blurry when made big)
             const k = Math.min(1, max / Math.max(it.img.naturalWidth || 1, it.img.naturalHeight || 1));
             const c = document.createElement('canvas');
             c.width = Math.max(1, Math.round(it.img.naturalWidth * k));
